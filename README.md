@@ -97,7 +97,12 @@ From the repository root:
 cp deploy/graylog/.env.example deploy/graylog/.env
 ```
 
-Edit `deploy/graylog/.env` and set both secrets. For the root password hash:
+Edit `deploy/graylog/.env` and set both secrets. Choose and record the Graylog
+administrator password before starting the containers. Graylog does not
+generate a recoverable first-run password in this deployment; the password is
+provided by you as a SHA-256 hash.
+
+Generate the password hash:
 
 ```bash
 printf '%s' 'CHOOSE_A_GRAYLOG_ADMIN_PASSWORD' | sha256sum
@@ -111,9 +116,17 @@ docker compose --env-file deploy/graylog/.env \
   -f deploy/graylog/docker-compose.yml up -d
 ```
 
+Check the startup logs for readiness and errors:
+
+```bash
+docker compose --env-file deploy/graylog/.env \
+  -f deploy/graylog/docker-compose.yml logs --tail=200
+```
+
 Open the Graylog URL and log in as `admin` using the password whose SHA-256
-hash was placed in `GRAYLOG_ROOT_PASSWORD_SHA2`. Complete the Data Node
-initialization before creating inputs.
+hash was placed in `GRAYLOG_ROOT_PASSWORD_SHA2`. Complete the Graylog Data Node
+initialization in the web interface before creating inputs. Save the password
+in your password manager; do not expect `docker logs` to print it.
 
 ### Create Graylog inputs
 
@@ -158,18 +171,40 @@ docker compose version
 
 ## 4. Create `.env`
 
-Create the local environment file. It is ignored by Git and must never be
-committed:
+Create both local environment files with the guided wrapper. They are ignored
+by Git and must never be committed:
 
 ```bash
-cp .env.example .env
+bash deploy/home-lab/setup-env.sh
 ```
 
-Edit `.env` and set the required values.
+The wrapper copies `.env.example` and `deploy/graylog/.env.example`, generates
+CoPilot, database, MCP, and webhook secrets, and prompts for the Wazuh and
+Graylog connection values. It asks for the Graylog administrator password but
+writes only its SHA-256 hash to `deploy/graylog/.env`; keep the plaintext
+password in your password manager. It does not overwrite existing files.
+
+To intentionally replace existing environment files, use `--force`. The
+wrapper creates timestamped backups before replacing them:
+
+```bash
+bash deploy/home-lab/setup-env.sh --force
+```
+
+On Windows PowerShell, use:
+
+```powershell
+.\deploy\home-lab\setup-env.ps1
+```
+
+Review the generated `.env` and `deploy/graylog/.env` before starting any
+containers. Optional API keys such as OpenAI are prompted for and may be left
+blank.
 
 ### Application secrets
 
-Generate unique values for every deployment:
+If you prefer to populate the files manually, generate unique values for every
+deployment:
 
 ```bash
 openssl rand -base64 32

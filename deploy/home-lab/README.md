@@ -58,15 +58,68 @@ Enroll Windows and Linux agents from the Wazuh dashboard. For network devices,
 send syslog to the Wazuh manager or to Graylog if Graylog is enabled. Confirm
 that at least one endpoint is producing fresh alerts before continuing.
 
-## 2. Configure CoPilot
+## 2. Start and initialize Graylog
 
-From the repository root on the target server:
+From the repository root:
 
 ```bash
-cp .env.example .env
-mkdir -p data/copilot-mcp
+cp deploy/graylog/.env.example deploy/graylog/.env
+```
+
+Choose a Graylog administrator password, save it in a password manager, and
+put only its SHA-256 hash in `deploy/graylog/.env`:
+
+```bash
+printf '%s' 'CHOOSE_A_GRAYLOG_ADMIN_PASSWORD' | sha256sum
+```
+
+Set `GRAYLOG_PASSWORD_SECRET` to a separate value generated with
+`openssl rand -hex 48`, then start the Graylog project:
+
+```bash
+docker compose --env-file deploy/graylog/.env \
+  -f deploy/graylog/docker-compose.yml up -d
+docker compose --env-file deploy/graylog/.env \
+  -f deploy/graylog/docker-compose.yml ps
+docker compose --env-file deploy/graylog/.env \
+  -f deploy/graylog/docker-compose.yml logs --tail=200
+```
+
+Open Graylog at `GRAYLOG_HTTP_EXTERNAL_URI`, log in as `admin` with the
+password you selected, and complete Data Node initialization. Graylog does
+not generate a password that can be recovered from `docker logs` with this
+configuration. The logs indicate readiness and errors only; keep the chosen
+password in a password manager.
+
+After Data Node initialization, create Syslog UDP/TCP inputs, create the UDM
+and AdGuard streams, and verify that a test UDM message arrives before
+starting CoPilot.
+
+## 3. Configure CoPilot
+
+From the repository root on the target server, use the guided environment
+wrapper first:
+
+```bash
+bash deploy/home-lab/setup-env.sh
+```
+
+The wrapper creates both `.env` and `deploy/graylog/.env`, generates internal
+secrets, prompts for Wazuh and Graylog values, and stores only the SHA-256 hash
+of the Graylog administrator password in the Graylog environment file. It
+does not overwrite existing environment files. Use `--force` only when you
+intend to replace them; timestamped backups are created first.
+
+On Windows PowerShell:
+
+```powershell
+.\deploy\home-lab\setup-env.ps1
+```
+
+Review both generated files, then validate CoPilot:
+
+```bash
 docker compose -f docker-compose.yml -f deploy/home-lab/docker-compose.override.yml config
-docker compose -f docker-compose.yml -f deploy/home-lab/docker-compose.override.yml up -d
 ```
 
 For repeatable setup from PowerShell, use:
@@ -108,7 +161,7 @@ analysis runner. CoPilot is accessed through its HTTPS frontend. If Graylog
 must call CoPilot from another host, expose only backend port `5000` on the
 private LAN and set a strong `GRAYLOG_API_HEADER_VALUE`.
 
-## 3. Complete the first useful loop
+## 4. Complete the first useful loop
 
 1. Open CoPilot over the private HTTPS address and create the administrator.
 2. Configure and verify the Wazuh Manager and Wazuh Indexer connectors.
