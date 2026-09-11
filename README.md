@@ -1,91 +1,384 @@
-<h1 align="center">
+# HomeSIEM
 
-<a href="https://www.socfortress.co"><img src="frontend/src/assets/images/socfortress_logo_default_dark.svg" width="300" height="200"></a>
+HomeSIEM is a home-lab security monitoring and response deployment built
+around Wazuh and SOCFortress CoPilot. Wazuh collects and stores endpoint and
+network telemetry. CoPilot provides investigation, enrichment, case
+management, dashboards, and response workflows.
 
-SOCFortress CoPilot
+This repository is intended to be cloned to a server, configured with a local
+`.env` file, and deployed with Docker Compose.
 
-[![Medium](https://img.shields.io/badge/Medium-12100E?style=for-the-badge&logo=medium&logoColor=white)](https://socfortress.medium.com/)
-[![YouTube](https://img.shields.io/badge/YouTube-25K%2B%20Subscribers-%23FF0000.svg?style=for-the-badge&logo=YouTube&logoColor=white)](https://www.youtube.com/@taylorwalton_socfortress?sub_confirmation=1)
-[![Discord Shield](https://discordapp.com/api/guilds/871419379999469568/widget.png?style=shield)](https://discord.gg/UN3pNBzaEQ)
-[![GitHub Sponsors](https://img.shields.io/badge/sponsor-30363D?style=for-the-badge&logo=GitHub-Sponsors&logoColor=#EA4AAA)](https://github.com/sponsors/taylorwalton)
+## Architecture
 
-[![Get in Touch](https://img.shields.io/badge/📧%20Get%20in%20Touch-Friendly%20Support%20Awaits!-blue?style=for-the-badge)](https://www.socfortress.co/contact_form.html)
+HomeSIEM uses two Compose projects:
 
-</h1>
+```text
+Home endpoints and network devices
+        |
+        +--> Wazuh agents and syslog
+        |         |
+        |         +--> Wazuh Manager API
+        |         +--> Wazuh Indexer / OpenSearch
+        |
+        +--> optional Graylog
 
-<h4 align="center">
-
-[SOCFortress CoPilot](https://www.socfortress.co) focuses on providing a single pane of glass for all your security operations needs. Simplify your open source security stack with a single platform focused on making open source security tools easier to use and more accessible.
-
-![demo_timeline](frontend/src/assets/images/copilot_gif.gif)
-
-## Table of contents
-
-- [Getting Started](#getting-started)
-  - [Install / Upgrade](#install--upgrade)
-- [Home SIEM deployment](#home-siem-deployment)
-- [Connectors](#connectors)
-- [Help](#help)
-- [License](#license)
-- [Sponsoring](#sponsoring)
-
-## Getting started
-
-📚 **Documentation:** https://docs.socfortress.co
-
-CoPilot's true power comes from the ability to integrate with your existing security stack. We have built-in integrations with the following tools:
-
-- [Wazuh](https://wazuh.com/)
-- [Graylog](https://www.graylog.org/)
-- [Velociraptor](https://docs.velociraptor.app/)
-- [Grafana](https://grafana.com/)
-- [InfluxDB](https://www.influxdata.com/)
-
-❗️ **Note:** CoPilot is currently in beta. We are actively working on adding more integrations and features. If you have any suggestions or feedback, please let us know!
-
-### Install / Upgrade
-
-All install + upgrade instructions live in the docs site (so the README doesn’t drift):
-
-- **Docs home:** https://docs.socfortress.co
-- **Install / Upgrade:** https://docs.socfortress.co/getting-started/install-upgrade
-- (Source file) [`docs/getting-started/install-upgrade.mdx`](docs/getting-started/install-upgrade.mdx)
-
-Quick upgrade reminder (from your CoPilot directory):
-
-```bash
-docker compose pull
-docker compose up -d
+CoPilot --> Wazuh Manager and Indexer
+        --> optional Velociraptor collection and response
+        --> optional Shuffle automation and notifications
+        --> optional VirusTotal enrichment
+        --> optional Grafana and InfluxDB dashboards
 ```
 
-### Home SIEM deployment
+Wazuh is deployed using its official Docker project. CoPilot is deployed from
+this repository. Keeping Wazuh separate preserves its certificate-generation,
+indexer bootstrap, upgrade, and recovery procedures.
 
-For a Wazuh-centered home lab, use the deployment profile in
-[`deploy/home-lab/README.md`](deploy/home-lab/README.md). It includes a
-hardened Compose override and an incremental setup path for Wazuh, Graylog,
-Velociraptor, Shuffle, Grafana, InfluxDB, and Talon.
+## Deployment status
 
-The deployment uses Wazuh's official Compose project plus CoPilot's Compose
-project, coordinated by `deploy/home-lab/setup.ps1` or `setup.sh`. This keeps
-Wazuh's certificate bootstrap and upgrade path intact while providing a single
-repeatable command for the CoPilot side.
+The supported first deployment is:
 
-## Connectors
+1. Wazuh single-node deployment
+2. One Windows or Linux Wazuh agent
+3. CoPilot connected to Wazuh
+4. One harmless alert and case workflow
+5. Optional response and automation tools
 
-CoPilot is designed to be a single pane of glass for your security operations. Think of it as a hub for all your security tools. CoPilot Connectors are the glue that binds your security tools to CoPilot. We take advantage of the APIs and webhooks provided by your security tools to provide a seamless integration.
+Do not enable automated containment until collection and alert handling have
+been tested on a disposable endpoint.
 
-## Help
+## Requirements
 
-You can reach us on [Discord](https://discord.gg/UN3pNBzaEQ) or by [📧](mailto:info@socfortress.co) if you have any question, issue or idea!
+The initial server should have:
 
-Check out our full video tutorial series on [![YouTube](https://img.shields.io/badge/YouTube-%23FF0000.svg?style=for-the-badge&logo=YouTube&logoColor=white)](https://www.youtube.com/watch?v=qQbex2zAhWI&list=PLB6hQ_WpB6U0e5oSLXJMcxmSzz7n3zvD-&ab_channel=TaylorWalton)
+- Linux VM or dedicated Linux server
+- Docker Engine and the Docker Compose plugin
+- 4 vCPU
+- 16 GB RAM
+- 250 GB SSD minimum
+- Stable LAN address
+- Private access through a VPN or authenticated reverse proxy
 
-## License
+Increase storage for long endpoint retention, file collection, and network
+telemetry. Do not expose Wazuh, OpenSearch, MySQL, MinIO, Velociraptor, or
+Shuffle administration ports to the public internet.
 
-The contents of this repository is available under [AGPL-3.0 license](LICENSE.txt).
+## 1. Deploy Wazuh
 
-## Sponsoring
+Install the official Wazuh Docker deployment on the target server. Use the
+single-node profile and follow Wazuh's certificate-generation instructions.
+Pin the Wazuh version used for the test deployment.
 
-If you like this project and want to support it, you can consider becoming a sponsor to help us continue maintaining it and adding new features.
+Record these values after Wazuh starts:
 
-[![GitHub Sponsors](https://img.shields.io/badge/sponsor-30363D?style=for-the-badge&logo=GitHub-Sponsors&logoColor=#EA4AAA)](https://github.com/sponsors/taylorwalton)
+- Wazuh Manager API URL, normally HTTPS port `55000`
+- Wazuh Indexer URL, normally HTTPS port `9200`
+- Wazuh Manager API username and password
+- Wazuh Indexer username and password
+- Wazuh dashboard URL
+
+Enroll one Windows or Linux endpoint and verify that it is online. Confirm
+that the endpoint generates at least one recent alert before configuring
+CoPilot.
+
+For network devices, send syslog to Wazuh or add Graylog later when you need
+additional parsing, streams, or event definitions.
+
+## 2. Clone HomeSIEM
+
+On the target server:
+
+```bash
+git clone https://github.com/Noemad33/HomeSIEM.git
+cd HomeSIEM
+docker version
+docker compose version
+```
+
+## 3. Create `.env`
+
+Create the local environment file. It is ignored by Git and must never be
+committed:
+
+```bash
+cp .env.example .env
+```
+
+Edit `.env` and set the required values.
+
+### Application secrets
+
+Generate unique values for every deployment:
+
+```bash
+openssl rand -base64 32
+openssl rand -hex 32
+python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+```
+
+Use the first value for `JWT_SECRET`, the second for MCP and webhook tokens,
+and the Fernet value for `TOTP_ENCRYPTION_KEY`. Keep the TOTP key unchanged
+after users enroll in two-factor authentication.
+
+Generate database and MinIO passwords with:
+
+```bash
+openssl rand -hex 24
+```
+
+Set unique values for:
+
+- `JWT_SECRET`
+- `SSO_STATE_SECRET`
+- `TOTP_ENCRYPTION_KEY`
+- `MYSQL_ROOT_PASSWORD`
+- `MYSQL_PASSWORD`
+- `MINIO_ROOT_PASSWORD`
+- `GRAYLOG_API_HEADER_VALUE`
+- `VELOCIRAPTOR_API_HEADER_VALUE`
+- `GRAFANA_API_HEADER_VALUE`
+- MCP authentication tokens
+
+### Wazuh values
+
+Set the CoPilot Wazuh and OpenSearch values to the real Wazuh server:
+
+```dotenv
+WAZUH_INDEXER_URL=https://wazuh-server.example.lan:9200
+WAZUH_INDEXER_USERNAME=admin
+WAZUH_INDEXER_PASSWORD=REPLACE_WITH_WAZUH_INDEXER_PASSWORD
+
+OPENSEARCH_URL=https://wazuh-server.example.lan:9200
+OPENSEARCH_USERNAME=admin
+OPENSEARCH_PASSWORD=REPLACE_WITH_WAZUH_INDEXER_PASSWORD
+
+WAZUH_MANAGER_URL=https://wazuh-server.example.lan:55000
+WAZUH_MANAGER_USERNAME=wazuh-wui
+WAZUH_MANAGER_PASSWORD=REPLACE_WITH_WAZUH_MANAGER_PASSWORD
+
+WAZUH_PROD_URL=https://wazuh-server.example.lan:55000
+WAZUH_PROD_USERNAME=wazuh-wui
+WAZUH_PROD_PASSWORD=REPLACE_WITH_WAZUH_MANAGER_PASSWORD
+```
+
+Use `OPENSEARCH_SSL_VERIFY=true` and `WAZUH_PROD_SSL_VERIFY=true` when the
+Wazuh certificates are signed by a trusted internal CA. Keep verification off
+only for an initial self-signed test and only across a private network.
+
+### Optional integrations
+
+Leave optional integrations disabled or pointed at placeholders until the
+corresponding service exists. Never use `admin`, `dummy`, or reusable example
+tokens as production credentials.
+
+For optional API keys, create them in the relevant service and set them only
+in the local `.env`:
+
+- `OPENAI_API_KEY`
+- `VIRUSTOTAL_API_KEY`
+- `SHUFFLER_API_KEY`
+- `INFLUXDB_API_KEY`
+- `TALON_API_KEY`
+- `RESEND_API_KEY`
+
+## 4. Start CoPilot
+
+From the repository root, validate the merged Compose model:
+
+```bash
+docker compose \
+  -f docker-compose.yml \
+  -f deploy/home-lab/docker-compose.override.yml config
+```
+
+Pull images and start CoPilot:
+
+```bash
+bash deploy/home-lab/setup.sh --pull --capture-admin-password
+```
+
+The script validates Compose, starts the services, watches the backend logs
+for the first-run administrator password, and saves it to:
+
+```text
+data/copilot-admin-password.txt
+```
+
+That file is ignored by Git and is not overwritten. Read it once with:
+
+```bash
+cat data/copilot-admin-password.txt
+```
+
+On Windows PowerShell, run:
+
+```powershell
+.\deploy\home-lab\setup.ps1 -Pull -CaptureAdminPassword
+```
+
+If the CoPilot database already exists, CoPilot will not emit a new password.
+The setup script will report that condition and will not delete volumes or
+reset the database. Use the existing administrator account or follow the
+account-recovery procedure for the installed CoPilot release.
+
+## 5. First login and connector setup
+
+Open the HTTPS address for the server. For an initial local test, use:
+
+```text
+https://SERVER_IP
+```
+
+A certificate warning is expected when the frontend generates a self-signed
+certificate.
+
+After the first login:
+
+1. Change the generated administrator password.
+2. Enable two-factor authentication.
+3. Create a separate analyst account.
+4. Configure the Wazuh Manager connector.
+5. Configure the Wazuh Indexer connector.
+6. Test both connectors.
+7. Create a customer code such as `HOME`.
+8. Associate the test agent with that customer.
+
+## 6. Test the complete monitoring loop
+
+Use a controlled, harmless test:
+
+1. Confirm the Wazuh agent is online.
+2. Generate a benign test event.
+3. Confirm the event appears in Wazuh.
+4. Confirm the alert appears in CoPilot.
+5. Open the alert and create a case.
+6. Add investigation notes and evidence.
+7. Confirm the audit trail.
+
+Back up CoPilot and Wazuh before adding response actions.
+
+## 7. Add optional services in stages
+
+### Velociraptor
+
+Deploy Velociraptor after Wazuh ingestion works. Generate a read-only API
+client configuration and replace:
+
+```text
+data/copilot-mcp/api.config.yaml
+```
+
+Then set the real `VELOCIRAPTOR_URL`, enable
+`MCP_VELOCIRAPTOR_SERVER_ENABLED=true`, configure the connector, and test
+read-only artifact collection. Keep quarantine and process termination manual.
+
+### Shuffle
+
+Start with notification-only workflows. Add approval gates before account
+changes, isolation, or containment actions.
+
+### Graylog
+
+Add Graylog when you need additional syslog pipelines, streams, or event
+definitions. Avoid duplicating Wazuh ingestion until there is a clear reason.
+
+### Grafana and InfluxDB
+
+Use these for infrastructure and sensor dashboards. They do not replace the
+Wazuh event store.
+
+### VirusTotal and other enrichment
+
+Configure enrichment API keys only after local alert flow works. Treat cloud
+submission and data-sharing implications as part of the deployment decision.
+
+## Operations
+
+Check status:
+
+```bash
+docker compose \
+  -f docker-compose.yml \
+  -f deploy/home-lab/docker-compose.override.yml ps
+```
+
+View backend logs:
+
+```bash
+docker compose \
+  -f docker-compose.yml \
+  -f deploy/home-lab/docker-compose.override.yml logs --tail=200 copilot-backend
+```
+
+Upgrade one service group at a time:
+
+```bash
+docker compose \
+  -f docker-compose.yml \
+  -f deploy/home-lab/docker-compose.override.yml pull
+docker compose \
+  -f docker-compose.yml \
+  -f deploy/home-lab/docker-compose.override.yml up -d
+```
+
+Do not run `docker compose down -v` unless you intentionally want to destroy
+the CoPilot database and other persistent volumes.
+
+Back up:
+
+- `.env`, stored securely outside Git
+- `data/`
+- the `mysql-data` Docker volume
+- Wazuh certificates
+- Wazuh Manager and Indexer data
+- Velociraptor API configuration
+
+## Troubleshooting
+
+If CoPilot does not start:
+
+```bash
+docker compose \
+  -f docker-compose.yml \
+  -f deploy/home-lab/docker-compose.override.yml logs --tail=200
+```
+
+If the backend reports `connector_url cannot be null`, verify that optional
+connector URL variables exist in `.env`. The backend seeds connector rows at
+startup and requires a non-null URL even for disabled integrations.
+
+If Wazuh data is missing:
+
+1. Check that the Wazuh agent is online.
+2. Test the Wazuh Manager connector.
+3. Test the Wazuh Indexer connector.
+4. Confirm the server can resolve and reach both Wazuh endpoints.
+5. Check TLS verification and credentials.
+
+If the first-run password is unavailable, the database was likely initialized
+already. Do not delete volumes as a first response. Use the existing account
+or the supported account-recovery process.
+
+## Repository safety
+
+Never commit:
+
+```text
+.env
+data/copilot-admin-password.txt
+Wazuh private keys
+Velociraptor private API configuration
+Shuffle credentials
+```
+
+Before committing, review staged files:
+
+```bash
+git diff --cached --name-only
+git diff --cached --check
+```
+
+## License and upstream
+
+HomeSIEM uses SOCFortress CoPilot and other upstream open-source projects.
+Review the license files included in this repository and the licenses of all
+deployed services before redistribution.
