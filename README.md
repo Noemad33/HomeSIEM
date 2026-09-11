@@ -23,6 +23,7 @@ SOCFortress CoPilot
 
 - [Getting Started](#getting-started)
   - [Install / Upgrade](#install--upgrade)
+- [Home SIEM deployment](#home-siem-deployment)
 - [Connectors](#connectors)
 - [Help](#help)
 - [License](#license)
@@ -56,6 +57,18 @@ Quick upgrade reminder (from your CoPilot directory):
 docker compose pull
 docker compose up -d
 ```
+
+### Home SIEM deployment
+
+For a Wazuh-centered home lab, use the deployment profile in
+[`deploy/home-lab/README.md`](deploy/home-lab/README.md). It includes a
+hardened Compose override and an incremental setup path for Wazuh, Graylog,
+Velociraptor, Shuffle, Grafana, InfluxDB, and Talon.
+
+The deployment uses Wazuh's official Compose project plus CoPilot's Compose
+project, coordinated by `deploy/home-lab/setup.ps1` or `setup.sh`. This keeps
+Wazuh's certificate bootstrap and upgrade path intact while providing a single
+repeatable command for the CoPilot side.
 
 ## Connectors
 

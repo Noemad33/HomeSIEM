@@ -1,0 +1,16 @@
+services:
+  copilot-backend:
+    ports: !reset []
+
+  copilot-frontend:
+    ports: !override
+      - "443:443"
+
+  copilot-mysql:
+    ports: !reset []
+
+  copilot-minio:
+    ports: !reset []
+
+  inspector-runner:
+    ports: !reset []

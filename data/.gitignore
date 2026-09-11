@@ -1,2 +1,4 @@
 *
 !.gitignore
+!copilot-mcp/
+!copilot-mcp/api.config.yaml
