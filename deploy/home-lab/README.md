@@ -67,8 +67,8 @@ main `.env` and `deploy/graylog/.env`; do not copy the Graylog template again:
 bash deploy/home-lab/setup-env.sh
 ```
 
-Choose a Graylog administrator password, save it in a password manager, and
-put only its SHA-256 hash in `deploy/graylog/.env`:
+Choose the final Graylog administrator password, save it in a password
+manager, and put only its SHA-256 hash in `deploy/graylog/.env`:
 
 ```bash
 printf '%s' 'CHOOSE_A_GRAYLOG_ADMIN_PASSWORD' | sha256sum
@@ -86,15 +86,35 @@ docker compose --env-file deploy/graylog/.env \
   -f deploy/graylog/docker-compose.yml logs --tail=200
 ```
 
-Open Graylog at `GRAYLOG_HTTP_EXTERNAL_URI`, log in as `admin` with the
-password you selected, and complete Data Node initialization. Graylog does
-not generate a password that can be recovered from `docker logs` with this
-configuration. The logs indicate readiness and errors only; keep the chosen
-password in a password manager.
+On first startup, Graylog/Data Node bootstrap may emit a temporary
+initialization password in the logs. Capture it before the bootstrap restart;
+it is needed for certificate and Data Node initialization:
 
-After Data Node initialization, create Syslog UDP/TCP inputs, create the UDM
-and AdGuard streams, and verify that a test UDM message arrives before
-starting CoPilot.
+```bash
+docker compose --env-file deploy/graylog/.env \
+  -f deploy/graylog/docker-compose.yml logs -f graylog graylog-datanode
+```
+
+Store that temporary password securely and never commit or paste it into
+support logs. After bootstrap completes, Graylog restarts and applies the
+final password configured by `GRAYLOG_ROOT_PASSWORD_SHA2` in
+`deploy/graylog/.env`. Open Graylog at `GRAYLOG_HTTP_EXTERNAL_URI` and log in
+as `admin` with the final password. Complete Data Node initialization before
+creating inputs. If the containers restart before the temporary password is
+captured, inspect the full first-start logs before removing any volumes.
+
+After Data Node initialization, open **System > Inputs** in Graylog and launch
+a **Syslog UDP** input with title `HomeSIEM Syslog UDP`, bind address
+`0.0.0.0`, and container port `1514`. If TCP is needed, launch a separate
+**Syslog TCP** input with the same bind address and container port. Docker
+maps these to host ports `2514/udp` and `2515/tcp`; enter `1514` in Graylog,
+not the host ports.
+
+Confirm the inputs show **Running**. In **Search**, verify that a test event
+contains fields such as `source`, `message`, and `gl2_source_input`. Then
+create streams named `UDM Firewall`, `AdGuard DNS`, and `Network Security`.
+Use fields confirmed in Search, such as the device `source` or input ID, for
+stream rules. Create event definitions only after real events are present.
 
 ## 3. Configure CoPilot
 

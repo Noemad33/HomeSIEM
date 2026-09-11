@@ -107,8 +107,8 @@ deploy/graylog/.env
 ```
 
 It generates internal database, JWT, Fernet, MCP, webhook, and Graylog secrets.
-It prompts for Wazuh URLs and credentials, the Graylog admin password, the
-Graylog URL, the CoPilot hostname, and the CoPilot HTTPS port.
+It prompts for Wazuh URLs and credentials, the final Graylog admin password,
+the Graylog URL, the CoPilot hostname, and the CoPilot HTTPS port.
 
 Use these answers when all services run on one VM with address `192.168.1.50`:
 
@@ -138,7 +138,7 @@ WAZUH_PROD_URL=https://192.168.1.50:55000
 GRAYLOG_URL=http://192.168.1.50:9000
 ```
 
-The wrapper stores only the SHA-256 hash of the Graylog password in
+The wrapper stores only the SHA-256 hash of the final Graylog password in
 `deploy/graylog/.env`. Keep the plaintext password in a password manager.
 The wrapper does not overwrite existing files. To replace them, use:
 
@@ -180,20 +180,86 @@ docker compose \
   logs --tail=200
 ```
 
-Open `http://VM_IP:9000` and log in as `admin` with the password selected in
-step 4. Graylog does not print a recoverable admin password in its logs.
-Complete Data Node initialization in the Graylog UI before continuing.
+On the first Graylog startup, the Graylog/Data Node bootstrap process may emit
+a temporary initialization password in the logs. Capture it before the
+bootstrap restart because it is needed to initialize certificates and the
+Data Node:
 
-Create these Graylog inputs:
+```bash
+docker compose \
+  --env-file deploy/graylog/.env \
+  -f deploy/graylog/docker-compose.yml \
+  logs -f graylog graylog-datanode
+```
 
-- Syslog UDP input on container port `1514`
-- Optional Syslog TCP input on container port `1514`
-- Stream for `udm`
-- Stream for `adguard`
-- Stream for `network-security`
+Search the output for the initial password/bootstrap message and store it in
+your password manager. Do not commit it or paste it into support logs. After
+the Data Node and certificate bootstrap completes, Graylog restarts and uses
+the final password configured by `GRAYLOG_ROOT_PASSWORD_SHA2` in
+`deploy/graylog/.env`.
 
-The Compose mapping exposes those inputs as host `2514/udp` and `2515/tcp`.
-The host ports avoid Wazuh's `1514-1516` ports.
+Open `http://VM_IP:9000` and log in as `admin` with that final password.
+Complete Data Node initialization in the Graylog UI before continuing. If the
+containers restart before you capture the bootstrap password, inspect the
+complete first-start logs before removing volumes.
+
+### Create the Syslog inputs
+
+In the Graylog web interface, open **System > Inputs**.
+
+For UDP:
+
+1. Select **Syslog UDP** from the input type list.
+2. Select **Launch new input**.
+3. Set the title to `HomeSIEM Syslog UDP`.
+4. Set **Bind address** to `0.0.0.0`.
+5. Set **Port** to `1514`.
+6. Save and launch the input.
+
+For TCP, repeat the process with **Syslog TCP**, title
+`HomeSIEM Syslog TCP`, bind address `0.0.0.0`, and container port `1514`.
+Create the TCP input only if a device needs TCP; UDP is the simplest UDM
+starting point.
+
+The container port is `1514`, but Docker maps it to these VM host ports:
+
+```text
+UDM UDP -> VM_IP:2514 -> Graylog container:1514/udp
+UDM TCP -> VM_IP:2515 -> Graylog container:1514/tcp
+```
+
+Do not enter `2514` or `2515` in the Graylog input dialog. Those are host
+ports used by devices outside the container.
+
+### Verify the input
+
+After saving an input, confirm it is **Running** in **System > Inputs**. Send a
+test syslog message from another Linux host if available:
+
+```bash
+logger --server VM_IP --udp --port 2514 "HomeSIEM Graylog test"
+```
+
+In Graylog, open **Search** and select the input or search for
+`HomeSIEM Graylog test`. Confirm fields such as `source`, `message`, and
+`gl2_source_input` are present before creating streams.
+
+### Create streams
+
+Open **Streams > Create stream** and create these streams:
+
+- `UDM Firewall`
+- `AdGuard DNS`
+- `Network Security`
+
+Initially route messages using stable fields visible in the received event,
+such as `source`, `facility`, or `gl2_source_input`. For example, route UDM
+messages by the UDM hostname or by the input ID. Do not build rules against a
+field until you have confirmed that field exists in Search.
+
+Create event definitions only after each stream contains real messages. Start
+with repeated firewall blocks, administrator logins, configuration changes,
+port scans, and unusual outbound activity.
 
 ## 6. Configure the UDM
 
