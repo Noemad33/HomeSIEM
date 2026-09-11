@@ -8,7 +8,7 @@ services:
       - graylog
 
   graylog-datanode:
-    image: graylog/graylog-datanode:6.2
+    image: graylog/graylog-datanode:${GRAYLOG_VERSION:-7.1.9}
     hostname: graylog-datanode
     restart: unless-stopped
     environment:
@@ -23,7 +23,7 @@ services:
       - graylog
 
   graylog:
-    image: graylog/graylog:6.2
+    image: graylog/graylog:${GRAYLOG_VERSION:-7.1.9}
     hostname: graylog
     restart: unless-stopped
     environment:

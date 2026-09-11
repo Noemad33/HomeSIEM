@@ -300,7 +300,8 @@ port scans, and unusual outbound activity.
 ### Graylog version warning
 
 If Graylog reports that version `6.2` is outdated, the running stack was
-started from an older checkout. Pull the current repository and confirm that
+started from an older checkout or its environment file lacks the version
+setting. Pull the current repository and confirm that
 `deploy/graylog/.env` contains:
 
 ```dotenv

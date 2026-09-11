@@ -112,6 +112,7 @@ $mainValues = @{
 }
 foreach ($entry in $mainValues.GetEnumerator()) { Set-EnvValue $mainEnv $entry.Key $entry.Value }
 Set-EnvValue $graylogEnv "GRAYLOG_PASSWORD_SECRET" $graylogSecret
+Set-EnvValue $graylogEnv "GRAYLOG_VERSION" "7.1.9"
 Set-EnvValue $graylogEnv "GRAYLOG_ROOT_PASSWORD_SHA2" $graylogHash
 Set-EnvValue $graylogEnv "GRAYLOG_HTTP_EXTERNAL_URI" $graylogExternalUri
 Set-EnvValue $graylogEnv "GRAYLOG_SYSLOG_UDP_PORT" "2514"
