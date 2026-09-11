@@ -62,6 +62,8 @@ function Read-Secret([string]$Prompt) {
 
 $copilotHost = Read-Host "CoPilot hostname or private IP [localhost]"
 if (-not $copilotHost) { $copilotHost = "localhost" }
+$copilotPort = Read-Host "CoPilot HTTPS port [8443]"
+if (-not $copilotPort) { $copilotPort = "8443" }
 $indexerUrl = Read-Host "Wazuh Indexer URL [https://wazuh-server:9200]"
 if (-not $indexerUrl) { $indexerUrl = "https://wazuh-server:9200" }
 $indexerUser = Read-Host "Wazuh Indexer username [admin]"
@@ -96,7 +98,7 @@ $hashBytes = $sha256.ComputeHash([Text.Encoding]::UTF8.GetBytes($graylogPassword
 $graylogHash = ($hashBytes | ForEach-Object { $_.ToString("x2") }) -join ""
 
 $mainValues = @{
-    SERVER_HOST = $copilotHost; COPILOT_URL = "https://$copilotHost"; JWT_SECRET = $jwt; SSO_STATE_SECRET = $sso; TOTP_ENCRYPTION_KEY = $totp
+    SERVER_HOST = $copilotHost; COPILOT_URL = "https://$copilotHost`:$copilotPort"; JWT_SECRET = $jwt; SSO_STATE_SECRET = $sso; TOTP_ENCRYPTION_KEY = $totp
     MYSQL_ROOT_PASSWORD = $mysqlRoot; MYSQL_PASSWORD = $mysqlPassword; MINIO_ROOT_PASSWORD = $minioPassword
     WAZUH_INDEXER_URL = $indexerUrl; WAZUH_INDEXER_USERNAME = $indexerUser; WAZUH_INDEXER_PASSWORD = $indexerPassword
     OPENSEARCH_URL = $indexerUrl; OPENSEARCH_USERNAME = $indexerUser; OPENSEARCH_PASSWORD = $indexerPassword

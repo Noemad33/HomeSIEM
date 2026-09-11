@@ -126,6 +126,10 @@ Do not use `localhost`, `127.0.0.1`, or container names from another Compose
 project. Restrict ports `9200`, `55000`, `9000`, `2514`, and `2515` to the
 LAN/VPN.
 
+CoPilot publishes HTTPS on host port `8443` and the container still listens on
+`443`. Use `https://VM_IP:8443` for the CoPilot browser URL. This avoids the
+common collision with the Wazuh dashboard, which normally owns host port `443`.
+
 On Windows PowerShell:
 
 ```powershell

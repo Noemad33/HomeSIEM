@@ -100,7 +100,9 @@ graylog_password_hash="$(printf '%s' "$graylog_password" | sha256sum | awk '{pri
 graylog_password_secret="$(random_hex 48)"
 
 set_env "$main_env" SERVER_HOST "$copilot_host"
-set_env "$main_env" COPILOT_URL "https://$copilot_host"
+read -r -p "CoPilot HTTPS port [8443]: " copilot_port
+copilot_port="${copilot_port:-8443}"
+set_env "$main_env" COPILOT_URL "https://$copilot_host:$copilot_port"
 set_env "$main_env" JWT_SECRET "$jwt_secret"
 set_env "$main_env" SSO_STATE_SECRET "$sso_secret"
 set_env "$main_env" TOTP_ENCRYPTION_KEY "$totp_key"
