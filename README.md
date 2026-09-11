@@ -20,7 +20,9 @@ Home endpoints and network devices
         |         +--> Wazuh Manager API
         |         +--> Wazuh Indexer / OpenSearch
         |
-        +--> optional Graylog
+        +--> Graylog syslog collector
+
+Graylog --> CoPilot alert ingestion
 
 CoPilot --> Wazuh Manager and Indexer
         --> optional Velociraptor collection and response
@@ -80,10 +82,70 @@ Enroll one Windows or Linux endpoint and verify that it is online. Confirm
 that the endpoint generates at least one recent alert before configuring
 CoPilot.
 
-For network devices, send syslog to Wazuh or add Graylog later when you need
-additional parsing, streams, or event definitions.
+For network devices, send syslog to Graylog. Graylog provides the input,
+pipeline, stream, and event-definition layer for network telemetry. Wazuh
+remains the endpoint SIEM and OpenSearch-backed event store.
 
-## 2. Clone HomeSIEM
+## 2. Deploy Graylog
+
+Graylog runs as a separate Compose project because it has its own MongoDB,
+Data Node, storage, initialization, and upgrade lifecycle.
+
+From the repository root:
+
+```bash
+cp deploy/graylog/.env.example deploy/graylog/.env
+```
+
+Edit `deploy/graylog/.env` and set both secrets. For the root password hash:
+
+```bash
+printf '%s' 'CHOOSE_A_GRAYLOG_ADMIN_PASSWORD' | sha256sum
+```
+
+Set `GRAYLOG_HTTP_EXTERNAL_URI` to the private URL users will open. Start the
+stack:
+
+```bash
+docker compose --env-file deploy/graylog/.env \
+  -f deploy/graylog/docker-compose.yml up -d
+```
+
+Open the Graylog URL and log in as `admin` using the password whose SHA-256
+hash was placed in `GRAYLOG_ROOT_PASSWORD_SHA2`. Complete the Data Node
+initialization before creating inputs.
+
+### Create Graylog inputs
+
+In Graylog, create a **Syslog UDP** input on port `1514` and, if needed, a
+second **Syslog TCP** input on port `1514`. Create streams for at least
+`udm`, `adguard`, and `network-security`.
+
+Add event definitions for repeated blocks, administrative logins, firewall
+configuration changes, port scans, and unusual outbound activity. Start with
+alerts only; do not automate containment yet.
+
+### Configure the UDM
+
+In UniFi Network, configure remote syslog to the HomeSIEM server's private IP:
+
+- Host: HomeSIEM server address
+- Port: `1514`
+- Protocol: UDP initially, TCP if supported and preferred
+- Categories: firewall, system, administrator, VPN, and security events
+
+Confirm messages arrive in Graylog before building event definitions.
+
+### AdGuard Home
+
+AdGuard Home is not assumed to emit its full DNS query log as native syslog.
+Use Graylog for AdGuard events after adding a small API-to-syslog collector or
+exporter. Start with AdGuard metrics in Grafana, then forward selected events
+such as blocked malicious domains, repeated DNS failures, and unusual clients
+into a Graylog stream. Do not forward every DNS query until storage and
+retention have been measured.
+
+## 3. Clone HomeSIEM
 
 On the target server:
 
@@ -94,7 +156,7 @@ docker version
 docker compose version
 ```
 
-## 3. Create `.env`
+## 4. Create `.env`
 
 Create the local environment file. It is ignored by Git and must never be
 committed:
@@ -180,7 +242,7 @@ in the local `.env`:
 - `TALON_API_KEY`
 - `RESEND_API_KEY`
 
-## 4. Start CoPilot
+## 5. Start CoPilot
 
 From the repository root, validate the merged Compose model:
 
@@ -220,7 +282,7 @@ The setup script will report that condition and will not delete volumes or
 reset the database. Use the existing administrator account or follow the
 account-recovery procedure for the installed CoPilot release.
 
-## 5. First login and connector setup
+## 6. First login and connector setup
 
 Open the HTTPS address for the server. For an initial local test, use:
 
@@ -238,11 +300,17 @@ After the first login:
 3. Create a separate analyst account.
 4. Configure the Wazuh Manager connector.
 5. Configure the Wazuh Indexer connector.
-6. Test both connectors.
-7. Create a customer code such as `HOME`.
-8. Associate the test agent with that customer.
+6. Configure the Graylog connector with the Graylog URL and credentials.
+7. Set the Graylog webhook header to the same value as `GRAYLOG_API_HEADER_VALUE`.
+8. Test all three connectors.
+9. Create a customer code such as `HOME`.
+10. Associate the test agent with that customer.
 
-## 6. Test the complete monitoring loop
+For the Graylog connector, use the private Graylog URL from
+`GRAYLOG_URL`, the Graylog administrator credentials, and the API/header value
+configured for CoPilot. Keep Graylog and CoPilot on a private network.
+
+## 7. Test the complete monitoring loop
 
 Use a controlled, harmless test:
 
@@ -256,7 +324,7 @@ Use a controlled, harmless test:
 
 Back up CoPilot and Wazuh before adding response actions.
 
-## 7. Add optional services in stages
+## 8. Add optional services in stages
 
 ### Velociraptor
 

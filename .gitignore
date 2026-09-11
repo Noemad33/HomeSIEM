@@ -46,6 +46,7 @@ wheels/
 *.db
 *.db-journal
 .env
+deploy/graylog/.env
 data/copilot-admin-password.txt
 .env.*
 !.env.example

@@ -121,10 +121,11 @@ private LAN and set a strong `GRAYLOG_API_HEADER_VALUE`.
 
 ### Graylog
 
-Add Graylog when you need normalized syslog pipelines, streams, or event
-definitions. Use Graylog 6.x, point its event output at the Wazuh indexer
-pattern used by this deployment, and configure its CoPilot webhook secret.
-Validate one event definition end to end before creating broad alert rules.
+Use the bundled Graylog project at `deploy/graylog`. Start it before CoPilot,
+create its Syslog UDP/TCP inputs, and send UDM logs to the Graylog host. Use
+Graylog streams and event definitions for UDM and AdGuard-derived events, then
+configure the Graylog connector in CoPilot. Validate one event definition end
+to end before creating broad alert rules.
 
 ### Velociraptor
 
