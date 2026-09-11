@@ -48,6 +48,24 @@ The supported first deployment is:
 Do not enable automated containment until collection and alert handling have
 been tested on a disposable endpoint.
 
+## Quick start order
+
+Run the deployment in this order:
+
+1. Deploy Wazuh and enroll one test agent.
+2. Clone this repository.
+3. Run `bash deploy/home-lab/setup-env.sh` to create both `.env` files and
+  generate their secrets.
+4. Start and initialize Graylog, then create its syslog inputs and streams.
+5. Configure the UDM to send syslog to Graylog and verify that logs arrive.
+6. Start CoPilot with
+  `bash deploy/home-lab/setup.sh --pull --capture-admin-password`.
+7. Configure and test the Wazuh and Graylog connectors in CoPilot.
+
+The detailed sections below follow these same tasks. The environment wrapper
+must run before Graylog or CoPilot because it creates both
+`deploy/graylog/.env` and the main `.env`.
+
 ## Requirements
 
 The initial server should have:
@@ -87,6 +105,10 @@ pipeline, stream, and event-definition layer for network telemetry. Wazuh
 remains the endpoint SIEM and OpenSearch-backed event store.
 
 ## 2. Deploy Graylog
+
+Complete the repository cloning and `.env` setup steps before starting this
+section. The environment wrapper creates the Graylog environment file used
+below.
 
 Graylog runs as a separate Compose project because it has its own MongoDB,
 Data Node, storage, initialization, and upgrade lifecycle.
@@ -200,6 +222,58 @@ On Windows PowerShell, use:
 Review the generated `.env` and `deploy/graylog/.env` before starting any
 containers. Optional API keys such as OpenAI are prompted for and may be left
 blank.
+
+### URL answers on a single Debian VM
+
+When Wazuh, Graylog, and CoPilot run in separate Compose projects on the same
+Debian 12 VM, answer the wrapper's URL prompts with the VM's private LAN IP or
+DNS hostname. Do not use `localhost`, `127.0.0.1`, or another Compose
+project's container name.
+
+For example, if the VM is `192.168.1.50`, use:
+
+```text
+CoPilot hostname or private IP: 192.168.1.50
+Wazuh Indexer URL: https://192.168.1.50:9200
+Wazuh Indexer username: admin
+Wazuh Indexer password: <Wazuh indexer password>
+Wazuh Manager URL: https://192.168.1.50:55000
+Wazuh Manager username: wazuh-wui
+Wazuh Manager password: <Wazuh Manager API password>
+Graylog URL: http://192.168.1.50:9000
+Graylog admin password: <Graylog password chosen during setup>
+Graylog external URL: http://192.168.1.50:9000/
+```
+
+The resulting cross-service values should be equivalent to:
+
+```dotenv
+SERVER_HOST=192.168.1.50
+COPILOT_URL=https://192.168.1.50
+WAZUH_INDEXER_URL=https://192.168.1.50:9200
+OPENSEARCH_URL=https://192.168.1.50:9200
+WAZUH_MANAGER_URL=https://192.168.1.50:55000
+WAZUH_PROD_URL=https://192.168.1.50:55000
+GRAYLOG_URL=http://192.168.1.50:9000
+GRAYLOG_NETWORK_URL=http://192.168.1.50:9000
+```
+
+The VM firewall must allow CoPilot-to-Wazuh traffic on `9200` and `55000`,
+CoPilot-to-Graylog traffic on `9000`, and UDM-to-Graylog syslog on `1514/udp`
+or `1514/tcp`. Keep these ports restricted to the home LAN or VPN.
+
+For an initial Wazuh test using its default self-signed certificates, leave
+`OPENSEARCH_SSL_VERIFY=false` and `WAZUH_PROD_SSL_VERIFY=false`. Enable both
+after installing certificates trusted by the CoPilot VM.
+
+Before running the wrapper, test reachability from the VM:
+
+```bash
+curl -k https://192.168.1.50:9200
+curl -k https://192.168.1.50:55000
+curl http://192.168.1.50:9000
+sudo ss -lntup | grep -E '1514|55000|9000|9200'
+```
 
 ### Application secrets
 

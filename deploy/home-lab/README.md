@@ -110,6 +110,19 @@ of the Graylog administrator password in the Graylog environment file. It
 does not overwrite existing environment files. Use `--force` only when you
 intend to replace them; timestamped backups are created first.
 
+When all three Compose projects run on the same Debian VM, answer the URL
+prompts with the VM's private LAN IP or DNS hostname. For example:
+
+```text
+CoPilot: 192.168.1.50
+Wazuh Indexer: https://192.168.1.50:9200
+Wazuh Manager: https://192.168.1.50:55000
+Graylog: http://192.168.1.50:9000
+```
+
+Do not use `localhost`, `127.0.0.1`, or container names from another Compose
+project. Restrict ports `9200`, `55000`, `9000`, and `1514` to the LAN/VPN.
+
 On Windows PowerShell:
 
 ```powershell
