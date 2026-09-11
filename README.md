@@ -115,9 +115,8 @@ Data Node, storage, initialization, and upgrade lifecycle.
 
 From the repository root:
 
-```bash
-cp deploy/graylog/.env.example deploy/graylog/.env
-```
+The `setup-env.sh` command in step 4 already created
+`deploy/graylog/.env`. Do not copy the Graylog template again.
 
 Edit `deploy/graylog/.env` and set both secrets. Choose and record the Graylog
 administrator password before starting the containers. Graylog does not
@@ -153,7 +152,9 @@ in your password manager; do not expect `docker logs` to print it.
 ### Create Graylog inputs
 
 In Graylog, create a **Syslog UDP** input on port `1514` and, if needed, a
-second **Syslog TCP** input on port `1514`. Create streams for at least
+second **Syslog TCP** input on port `1514`. The container listens internally
+on `1514`; the default host mappings are UDP `2514` and TCP `2515` because
+Wazuh commonly owns host ports `1514-1516`. Create streams for at least
 `udm`, `adguard`, and `network-security`.
 
 Add event definitions for repeated blocks, administrative logins, firewall
@@ -165,7 +166,7 @@ alerts only; do not automate containment yet.
 In UniFi Network, configure remote syslog to the HomeSIEM server's private IP:
 
 - Host: HomeSIEM server address
-- Port: `1514`
+- Port: `2514` for UDP, or `2515` for TCP
 - Protocol: UDP initially, TCP if supported and preferred
 - Categories: firewall, system, administrator, VPN, and security events
 
@@ -259,8 +260,8 @@ GRAYLOG_NETWORK_URL=http://192.168.1.50:9000
 ```
 
 The VM firewall must allow CoPilot-to-Wazuh traffic on `9200` and `55000`,
-CoPilot-to-Graylog traffic on `9000`, and UDM-to-Graylog syslog on `1514/udp`
-or `1514/tcp`. Keep these ports restricted to the home LAN or VPN.
+CoPilot-to-Graylog traffic on `9000`, and UDM-to-Graylog syslog on `2514/udp`
+or `2515/tcp`. Keep these ports restricted to the home LAN or VPN.
 
 For an initial Wazuh test using its default self-signed certificates, leave
 `OPENSEARCH_SSL_VERIFY=false` and `WAZUH_PROD_SSL_VERIFY=false`. Enable both
@@ -272,7 +273,7 @@ Before running the wrapper, test reachability from the VM:
 curl -k https://192.168.1.50:9200
 curl -k https://192.168.1.50:55000
 curl http://192.168.1.50:9000
-sudo ss -lntup | grep -E '1514|55000|9000|9200'
+sudo ss -lntup | grep -E '1514|1515|1516|2514|2515|55000|9000|9200'
 ```
 
 ### Application secrets

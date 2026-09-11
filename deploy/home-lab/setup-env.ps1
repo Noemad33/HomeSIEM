@@ -112,6 +112,8 @@ foreach ($entry in $mainValues.GetEnumerator()) { Set-EnvValue $mainEnv $entry.K
 Set-EnvValue $graylogEnv "GRAYLOG_PASSWORD_SECRET" $graylogSecret
 Set-EnvValue $graylogEnv "GRAYLOG_ROOT_PASSWORD_SHA2" $graylogHash
 Set-EnvValue $graylogEnv "GRAYLOG_HTTP_EXTERNAL_URI" $graylogExternalUri
+Set-EnvValue $graylogEnv "GRAYLOG_SYSLOG_UDP_PORT" "2514"
+Set-EnvValue $graylogEnv "GRAYLOG_SYSLOG_TCP_PORT" "2515"
 
 Write-Host "Created .env and deploy\graylog\.env with generated secrets."
 Write-Host "The Graylog admin password was not written to either file. Store it in your password manager."

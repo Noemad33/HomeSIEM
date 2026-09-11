@@ -60,10 +60,11 @@ that at least one endpoint is producing fresh alerts before continuing.
 
 ## 2. Start and initialize Graylog
 
-From the repository root:
+Run the guided environment setup before this section. It creates both the
+main `.env` and `deploy/graylog/.env`; do not copy the Graylog template again:
 
 ```bash
-cp deploy/graylog/.env.example deploy/graylog/.env
+bash deploy/home-lab/setup-env.sh
 ```
 
 Choose a Graylog administrator password, save it in a password manager, and
@@ -97,18 +98,19 @@ starting CoPilot.
 
 ## 3. Configure CoPilot
 
-From the repository root on the target server, use the guided environment
-wrapper first:
+From the repository root on the target server, review the generated
+environment files before starting CoPilot:
 
 ```bash
-bash deploy/home-lab/setup-env.sh
+less .env
+less deploy/graylog/.env
 ```
 
-The wrapper creates both `.env` and `deploy/graylog/.env`, generates internal
-secrets, prompts for Wazuh and Graylog values, and stores only the SHA-256 hash
-of the Graylog administrator password in the Graylog environment file. It
-does not overwrite existing environment files. Use `--force` only when you
-intend to replace them; timestamped backups are created first.
+The wrapper already created both files, generated internal secrets, prompted
+for Wazuh and Graylog values, and stored only the SHA-256 hash of the Graylog
+administrator password in the Graylog environment file. It does not overwrite
+existing environment files. Use `--force` only when you intend to replace
+them; timestamped backups are created first.
 
 When all three Compose projects run on the same Debian VM, answer the URL
 prompts with the VM's private LAN IP or DNS hostname. For example:
@@ -121,7 +123,8 @@ Graylog: http://192.168.1.50:9000
 ```
 
 Do not use `localhost`, `127.0.0.1`, or container names from another Compose
-project. Restrict ports `9200`, `55000`, `9000`, and `1514` to the LAN/VPN.
+project. Restrict ports `9200`, `55000`, `9000`, `2514`, and `2515` to the
+LAN/VPN.
 
 On Windows PowerShell:
 
