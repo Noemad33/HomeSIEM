@@ -110,11 +110,26 @@ a **Syslog UDP** input with title `HomeSIEM Syslog UDP`, bind address
 maps these to host ports `2514/udp` and `2515/tcp`; enter `1514` in Graylog,
 not the host ports.
 
-Confirm the inputs show **Running**. In **Search**, verify that a test event
-contains fields such as `source`, `message`, and `gl2_source_input`. Then
-create streams named `UDM Firewall`, `AdGuard DNS`, and `Network Security`.
-Use fields confirmed in Search, such as the device `source` or input ID, for
-stream rules. Create event definitions only after real events are present.
+New inputs may initially show **Setup mode**. Click **Setup**, choose
+**Create new stream**, and name it `UDM Firewall`. On the Routing page:
+
+- Description: `UDM firewall and security events`
+- **Remove matches from Default Stream:** checked
+- **Create a new pipeline for this stream:** checked
+- **Index Set:** choose **Default index set** for the first test
+
+The Default index set notice is advisory, not an error. A dedicated index set
+can be created later when retention and rotation are planned. Click **Next**,
+review the **Launch** page, then click **Launch** or **Finish**. Use the
+**Diagnosis** page to confirm there are no input, stream, or processing errors.
+Return to **System > Inputs**, click **Start** or **Resume**, and confirm the
+input is **Running**.
+
+In **Search**, verify that a test event contains `source`, `message`, and
+`gl2_source_input`, then confirm it appears in the `UDM Firewall` stream.
+Create the additional streams `AdGuard DNS` and `Network Security` only after
+the first stream works. Use fields confirmed in Search for their rules. Create
+event definitions only after real events are present.
 
 ## 3. Configure CoPilot
 

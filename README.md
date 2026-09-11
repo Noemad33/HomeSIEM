@@ -54,6 +54,11 @@ Reserve these host ports:
 | Graylog | `2515/tcp` | UDM syslog |
 | CoPilot | `8443` | HTTPS frontend |
 
+This repository pins Graylog and Graylog Data Node to `7.1.9`, the current
+stable release used by this deployment. Keep both Graylog images on the same
+version. Graylog 7.1 requires MongoDB 7.x, which is why this stack uses
+`mongo:7.0`.
+
 Restrict these ports to the LAN or VPN. Do not expose service administration
 ports directly to the public internet.
 
@@ -214,7 +219,21 @@ For UDP:
 3. Set the title to `HomeSIEM Syslog UDP`.
 4. Set **Bind address** to `0.0.0.0`.
 5. Set **Port** to `1514`.
-6. Save and launch the input.
+6. Save the input. Graylog may show it as **Setup mode**; this is expected.
+7. Click **Setup** for the input to open the routing wizard.
+8. Choose **Create new stream** if `UDM Firewall` does not exist.
+9. Name the stream `UDM Firewall` and create it.
+9. In the stream wizard, use the following choices:
+   - **Description:** `UDM firewall and security events`.
+   - **Remove matches from Default Stream:** checked.
+   - **Create a new pipeline for this stream:** checked.
+   - **Index Set:** use **Default index set** for this first test.
+10. Click **Next**. On the **Launch** tab, review the stream and input, then
+  click **Launch** or **Finish**.
+11. On the **Diagnosis** tab, confirm Graylog reports no input, stream, or
+  processing errors. If it offers a test or message check, run it.
+12. Return to **System > Inputs**, click **Start** or **Resume**, and confirm its state is
+  **Running**.
 
 For TCP, repeat the process with **Syslog TCP**, title
 `HomeSIEM Syslog TCP`, bind address `0.0.0.0`, and container port `1514`.
@@ -231,22 +250,39 @@ UDM TCP -> VM_IP:2515 -> Graylog container:1514/tcp
 Do not enter `2514` or `2515` in the Graylog input dialog. Those are host
 ports used by devices outside the container.
 
-### Verify the input
+### Verify the input and stream
 
-After saving an input, confirm it is **Running** in **System > Inputs**. Send a
-test syslog message from another Linux host if available:
+Setup mode means the input has been created but its stream/routing setup is
+not complete. The screenshot's **Default index set selected** warning is an
+advisory, not a failure. A dedicated index set is useful for long-term
+retention, but the Default index set is appropriate for this first test.
+Do not troubleshoot Docker ports until the wizard is finished.
+Send a test syslog message from another Linux host if available:
 
 ```bash
 logger --server VM_IP --udp --port 2514 "HomeSIEM Graylog test"
 ```
 
-In Graylog, open **Search** and select the input or search for
-`HomeSIEM Graylog test`. Confirm fields such as `source`, `message`, and
-`gl2_source_input` are present before creating streams.
+From the Graylog VM itself, use loopback instead:
+
+```bash
+logger --server 127.0.0.1 --udp --port 2514 "HomeSIEM Graylog test"
+```
+
+If `logger` is unavailable, use netcat:
+
+```bash
+printf '<134>HomeSIEM Graylog test\n' | nc -u -w1 127.0.0.1 2514
+```
+
+In Graylog, open **Search** and search for `HomeSIEM Graylog test`. Confirm
+fields such as `source`, `message`, and `gl2_source_input` are present. Open
+the `UDM Firewall` stream and confirm the message appears there as well.
 
 ### Create streams
 
-Open **Streams > Create stream** and create these streams:
+Open **Streams > Create stream** and create these additional streams after the
+UDP path works:
 
 - `UDM Firewall`
 - `AdGuard DNS`
@@ -260,6 +296,36 @@ field until you have confirmed that field exists in Search.
 Create event definitions only after each stream contains real messages. Start
 with repeated firewall blocks, administrator logins, configuration changes,
 port scans, and unusual outbound activity.
+
+### Graylog version warning
+
+If Graylog reports that version `6.2` is outdated, the running stack was
+started from an older checkout. Pull the current repository and confirm that
+`deploy/graylog/.env` contains:
+
+```dotenv
+GRAYLOG_VERSION=7.1.9
+```
+
+For an existing deployment, back up Graylog and MongoDB before upgrading. Do
+not run `down -v`; that deletes the Data Node, Graylog, and MongoDB volumes.
+Pull and recreate the Graylog services:
+
+```bash
+docker compose --env-file deploy/graylog/.env \
+  -f deploy/graylog/docker-compose.yml pull
+docker compose --env-file deploy/graylog/.env \
+  -f deploy/graylog/docker-compose.yml up -d
+```
+
+Check the resulting images and logs:
+
+```bash
+docker compose --env-file deploy/graylog/.env \
+  -f deploy/graylog/docker-compose.yml images
+docker compose --env-file deploy/graylog/.env \
+  -f deploy/graylog/docker-compose.yml logs --tail=200
+```
 
 ## 6. Configure the UDM
 
