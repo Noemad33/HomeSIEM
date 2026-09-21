@@ -1,6 +1,14 @@
 services:
   copilot-backend:
-    ports: !reset []
+    # Bound to BACKEND_BIND_IP (see .env) instead of 0.0.0.0, so port 5000 is
+    # reachable only from that one interface -- e.g. the VM's LAN IP, for
+    # things like Talon or a cross-host Graylog webhook -- not from every
+    # interface. Must be a literal IP; Docker's port-bind rejects hostnames
+    # (including "localhost") outright. Defaults to 127.0.0.1, which still
+    # works for a same-host Talon deployment without exposing anything to
+    # the LAN at all.
+    ports: !override
+      - "${BACKEND_BIND_IP:-127.0.0.1}:5000:5000"
 
   copilot-frontend:
     ports: !override

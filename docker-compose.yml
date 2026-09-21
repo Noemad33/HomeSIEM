@@ -138,6 +138,41 @@ services:
             - copilot-mysql
         restart: always
 
+    # Dashboards over the Wazuh Indexer's OpenSearch cluster. Needs the
+    # OpenSearch datasource plugin, which isn't bundled -- see README
+    # Section 10.1 for the data-source configuration gotchas (index pattern,
+    # etc). Requires data/grafana-data to exist and be owned by UID 472
+    # (the image's own user) before first start.
+    grafana:
+        image: grafana/grafana:12.3.3
+        environment:
+            - GF_PLUGINS_PREINSTALL_SYNC=grafana-opensearch-datasource
+            - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
+            - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD}
+        ports:
+            - "3000:3000"
+        volumes:
+            - ./data/grafana-data:/var/lib/grafana
+        restart: always
+
+    # Time-series store for infrastructure metrics/trend graphs. Not fed by
+    # anything in this stack by default -- see README Section 10.1.
+    influxdb:
+        image: influxdb:2.7
+        environment:
+            - DOCKER_INFLUXDB_INIT_MODE=setup
+            - DOCKER_INFLUXDB_INIT_USERNAME=${INFLUXDB_USER:-admin}
+            - DOCKER_INFLUXDB_INIT_PASSWORD=${INFLUXDB_PASSWORD}
+            - DOCKER_INFLUXDB_INIT_ORG=${INFLUXDB_ORG:-socfortress}
+            - DOCKER_INFLUXDB_INIT_BUCKET=${INFLUXDB_BUCKET:-copilot}
+            - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=${INFLUXDB_ADMIN_TOKEN}
+        ports:
+            - "8086:8086"
+        volumes:
+            - ./data/influxdb-data:/var/lib/influxdb2
+            - ./data/influxdb-config:/etc/influxdb2
+        restart: always
+
     # --- Tier 1 File Analysis inspection plane -------------------------------
     # copilot-backend talks HTTP to inspector-runner and NEVER touches the Docker
     # socket itself. inspector-runner spawns ONE hardened copilot-inspector

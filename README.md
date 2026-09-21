@@ -71,17 +71,20 @@ Reserve these host ports:
 | Wazuh | `55000` | Manager API |
 | Wazuh | `9200` | Indexer/OpenSearch |
 | Wazuh | `443` | Wazuh dashboard |
-| Graylog | `9000` | Web UI/API |
+| Graylog | `9000` | Web UI/API -- **collides with CoPilot MinIO's `9000` in the base `docker-compose.yml`.** Only safe because the home-lab override always strips MinIO's host publish; never run `docker compose up` on the CoPilot project without `-f deploy/home-lab/docker-compose.override.yml` |
 | Graylog | `2514/udp` | UDM syslog |
 | Graylog | `2515/tcp` | UDM syslog |
 | Graylog | `5555/tcp` | Wazuh Fluent Bit input (not mapped by default; see 8.4) |
 | CoPilot | `8443` | HTTPS frontend |
+| CoPilot | `5000` | Backend API (Graylog webhooks, Talon) -- bound to `BACKEND_BIND_IP` (default `127.0.0.1`, loopback only), not published on all interfaces |
 | Grafana      | `3000`  | Dashboards (OpenSearch + InfluxDB)                 |
 | InfluxDB     | `8086`  | Time-series API (deployed, currently unused)       |
 | Velociraptor | `8000`  | Agent/frontend (not yet deployed)                  |
 | Velociraptor | `8889`  | Web GUI (not yet deployed)                         |
 | Velociraptor | `8001`  | API, consumed by copilot-mcp (not yet deployed)    |
 | Shuffle      | `3443`  | Web UI (not yet deployed)                          |
+| Talon        | `3100`  | HTTP API/chat (not yet deployed; systemd service, not Docker) |
+| Talon (OneCLI vault) | `10254`, `10255` | Credential vault REST API/gateway, if used (not yet deployed) |
 
 This repository pins Graylog to `7.1.9`, the current stable release used by
 this deployment. Graylog 7.1 requires MongoDB 7.x, which is why this stack
@@ -771,14 +774,16 @@ know about.
 | --- | --- |
 | `siem/.env` `OPENSEARCH_HOSTS/USERNAME/PASSWORD` (step 7) | `WAZUH_INDEXER_URL`/`WAZUH_INDEXER_USERNAME`/`WAZUH_INDEXER_PASSWORD` from `.env` |
 | `mysql/.env` `MYSQL_HOST/PORT/USER/PASS/DB` (step 8) | `copilot-mysql` (container name, only reachable if Talon runs in the same Docker network -- see networking note below), `MYSQL_USER`, `MYSQL_PASSWORD` from `.env`, database `copilot` |
-| `copilot-mcp/.env` `COPILOT_URL/USERNAME/PASSWORD` (step 9) | `http://<VM_IP>:5000` (backend API port, not the `8443` HTTPS frontend), plus a **dedicated non-admin CoPilot analyst account** created for Talon -- do not use the admin login here |
+| `copilot-mcp/.env` `COPILOT_URL/USERNAME/PASSWORD` (step 9) | `http://127.0.0.1:5000` if Talon runs on the same VM as CoPilot (backend port 5000 is bound to loopback by default -- see `BACKEND_BIND_IP` in `.env` -- and Docker's loopback-bound publish is reachable from any host process, including Talon's systemd service); `http://<VM_IP>:5000` only if Talon runs on a different host, after setting `BACKEND_BIND_IP` to that LAN IP and restarting `copilot-backend`. Either way, use a **dedicated non-admin CoPilot analyst account** created for Talon -- do not use the admin login here |
 | `wazuh-mcp/.env` `WAZUH_PROD_URL/USERNAME/PASSWORD` (step 10) | `WAZUH_MANAGER_URL`/`WAZUH_MANAGER_USERNAME`/`WAZUH_MANAGER_PASSWORD` from `.env` |
 | `velociraptor-mcp` `api.config.yaml` (step 11) | The same client config generated in Section 10.2 -- generate a second `--name talon` client config, do not reuse the `copilot-mcp` one |
 
-Use the VM's LAN IP for every URL above, matching the rest of this
-runbook -- not `host.docker.internal` (Talon's guide defaults to this for
-same-host deployments, but whether it resolves depends on Talon's own
-container networking, which this repo does not control) and not `localhost`.
+For the Wazuh/Velociraptor rows above -- genuinely separate services, not
+CoPilot's own Docker-published ports -- use the VM's LAN IP, matching the
+rest of this runbook, not `host.docker.internal` (Talon's guide defaults to
+this for same-host deployments, but whether it resolves depends on Talon's
+own container networking, which this repo does not control) and not
+`localhost`.
 
 **Networking:** Talon runs as its own systemd service on the VM host
 (outside this repo's `docker-compose.yml`), listening on `3100`. Step 8's
