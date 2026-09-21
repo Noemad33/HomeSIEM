@@ -84,44 +84,47 @@ if [[ ! -f certificates/wazuh-indexer.crt || "$force_trust" == true ]]; then
     exit 1
   fi
   echo "Wrote deploy/graylog/certificates/wazuh-indexer.crt"
-
-  # Trust is only half of TLS validation -- Java also checks that the host
-  # you connected to matches the certificate's SAN/CN, even for a certificate
-  # it already trusts. Wazuh's certs are issued to a role name (e.g.
-  # "wazuh.indexer"), not an IP, so connecting via IP fails with
-  # "Hostname ... not verified" even though the cert itself is fine. Read the
-  # name the certificate actually claims, switch GRAYLOG_ELASTICSEARCH_HOSTS
-  # to use it, and map it to the real IP via Docker's extra_hosts so it
-  # still resolves.
-  cert_hostname="$(openssl x509 -in certificates/wazuh-indexer.crt -noout -ext subjectAltName 2>/dev/null \
-    | grep -oE 'DNS:[^, ]+' | head -1 | cut -d: -f2)"
-  if [[ -z "$cert_hostname" ]]; then
-    cert_hostname="$(openssl x509 -in certificates/wazuh-indexer.crt -noout -subject -nameopt multiline 2>/dev/null \
-      | sed -n 's/^ *commonName *= *//p')"
-  fi
-
-  if [[ -n "$cert_hostname" && "$cert_hostname" != "$host" ]]; then
-    new_hostport="${cert_hostname}:${port}"
-    if [[ -n "$userinfo" ]]; then
-      new_hosts_line="${scheme}://${userinfo}@${new_hostport}"
-    else
-      new_hosts_line="${scheme}://${new_hostport}"
-    fi
-    set_env GRAYLOG_ELASTICSEARCH_HOSTS "$new_hosts_line"
-    set_env GRAYLOG_WAZUH_INDEXER_HOSTNAME "$cert_hostname"
-    set_env GRAYLOG_WAZUH_INDEXER_IP "$host"
-    echo "Rewrote GRAYLOG_ELASTICSEARCH_HOSTS to connect via '$cert_hostname' (the"
-    echo "certificate's own name) instead of '$host', mapped to $host via"
-    echo "extra_hosts in docker-compose.yml. This avoids a 'Hostname not"
-    echo "verified' error that trusting the certificate alone does not fix."
-  elif [[ -z "$cert_hostname" ]]; then
-    echo "Warning: could not read a hostname from the fetched certificate;" >&2
-    echo "leaving GRAYLOG_ELASTICSEARCH_HOSTS as-is. If Graylog logs a" >&2
-    echo "'Hostname ... not verified' error, connect via the certificate's" >&2
-    echo "CN/SAN manually -- see README Section 5.1." >&2
-  fi
 else
   echo "Reusing existing deploy/graylog/certificates/wazuh-indexer.crt (rerun with --force-trust to refetch, e.g. after the Wazuh Indexer's certificate rotates)."
+fi
+
+# Trust is only half of TLS validation -- Java also checks that the host you
+# connected to matches the certificate's SAN/CN, even for a certificate it
+# already trusts. Wazuh's certs are issued to a role name (e.g.
+# "wazuh.indexer"), not an IP, so connecting via IP fails with "Hostname ...
+# not verified" even though the cert itself is fine. Read the name the
+# certificate actually claims, switch GRAYLOG_ELASTICSEARCH_HOSTS to use it,
+# and map it to the real IP via Docker's extra_hosts so it still resolves.
+# This runs every time, not just when a certificate was just fetched --
+# certificates/ is a bind mount, so it survives `docker compose down -v`,
+# and skipping this check whenever the file already existed left .env
+# permanently unfixed on a rerun.
+cert_hostname="$(openssl x509 -in certificates/wazuh-indexer.crt -noout -ext subjectAltName 2>/dev/null \
+  | grep -oE 'DNS:[^, ]+' | head -1 | cut -d: -f2)"
+if [[ -z "$cert_hostname" ]]; then
+  cert_hostname="$(openssl x509 -in certificates/wazuh-indexer.crt -noout -subject -nameopt multiline 2>/dev/null \
+    | sed -n 's/^ *commonName *= *//p')"
+fi
+
+if [[ -n "$cert_hostname" && "$cert_hostname" != "$host" ]]; then
+  new_hostport="${cert_hostname}:${port}"
+  if [[ -n "$userinfo" ]]; then
+    new_hosts_line="${scheme}://${userinfo}@${new_hostport}"
+  else
+    new_hosts_line="${scheme}://${new_hostport}"
+  fi
+  set_env GRAYLOG_ELASTICSEARCH_HOSTS "$new_hosts_line"
+  set_env GRAYLOG_WAZUH_INDEXER_HOSTNAME "$cert_hostname"
+  set_env GRAYLOG_WAZUH_INDEXER_IP "$host"
+  echo "Rewrote GRAYLOG_ELASTICSEARCH_HOSTS to connect via '$cert_hostname' (the"
+  echo "certificate's own name) instead of '$host', mapped to $host via"
+  echo "extra_hosts in docker-compose.yml. This avoids a 'Hostname not"
+  echo "verified' error that trusting the certificate alone does not fix."
+elif [[ -z "$cert_hostname" ]]; then
+  echo "Warning: could not read a hostname from the fetched certificate;" >&2
+  echo "leaving GRAYLOG_ELASTICSEARCH_HOSTS as-is. If Graylog logs a" >&2
+  echo "'Hostname ... not verified' error, connect via the certificate's" >&2
+  echo "CN/SAN manually -- see README Section 5.1." >&2
 fi
 
 compose=(docker compose --env-file .env -f docker-compose.yml)

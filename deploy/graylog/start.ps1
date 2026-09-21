@@ -69,31 +69,35 @@ if ((-not (Test-Path $certPath)) -or $ForceTrust) {
         "`n-----END CERTIFICATE-----"
     Set-Content -Path $certPath -Value $pem -NoNewline
     Write-Host "Wrote deploy\graylog\certificates\wazuh-indexer.crt"
-
-    # Trust is only half of TLS validation -- Java also checks that the host
-    # you connected to matches the certificate's SAN/CN, even for a
-    # certificate it already trusts. Wazuh's certs are issued to a role name
-    # (e.g. "wazuh.indexer"), not an IP, so connecting via IP fails with
-    # "Hostname ... not verified" even though the cert itself is fine.
-    # GetNameInfo returns the SAN DNS entry (falling back to CN), the same
-    # thing Java's hostname verifier checks.
-    $certHostname = $cert.GetNameInfo([System.Security.Cryptography.X509Certificates.X509NameType]::DnsName, $false)
-
-    if ($certHostname -and $certHostname -ne $targetHost) {
-        $newHostPort = "${certHostname}:${targetPort}"
-        $newHostsLine = if ($userinfo) { "${scheme}://${userinfo}@${newHostPort}" } else { "${scheme}://${newHostPort}" }
-        Set-EnvValue "GRAYLOG_ELASTICSEARCH_HOSTS" $newHostsLine
-        Set-EnvValue "GRAYLOG_WAZUH_INDEXER_HOSTNAME" $certHostname
-        Set-EnvValue "GRAYLOG_WAZUH_INDEXER_IP" $targetHost
-        Write-Host "Rewrote GRAYLOG_ELASTICSEARCH_HOSTS to connect via '$certHostname' (the"
-        Write-Host "certificate's own name) instead of '$targetHost', mapped to $targetHost via"
-        Write-Host "extra_hosts in docker-compose.yml. This avoids a 'Hostname not"
-        Write-Host "verified' error that trusting the certificate alone does not fix."
-    } elseif (-not $certHostname) {
-        Write-Warning "Could not read a hostname from the fetched certificate; leaving GRAYLOG_ELASTICSEARCH_HOSTS as-is. If Graylog logs a 'Hostname ... not verified' error, connect via the certificate's CN/SAN manually -- see README Section 5.1."
-    }
 } else {
     Write-Host "Reusing existing deploy\graylog\certificates\wazuh-indexer.crt (rerun with -ForceTrust to refetch, e.g. after the Wazuh Indexer's certificate rotates)."
+    $cert = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2($certPath)
+}
+
+# Trust is only half of TLS validation -- Java also checks that the host you
+# connected to matches the certificate's SAN/CN, even for a certificate it
+# already trusts. Wazuh's certs are issued to a role name (e.g.
+# "wazuh.indexer"), not an IP, so connecting via IP fails with "Hostname ...
+# not verified" even though the cert itself is fine. GetNameInfo returns the
+# SAN DNS entry (falling back to CN), the same thing Java's hostname
+# verifier checks. This runs every time, not just when a certificate was
+# just fetched -- the certificates directory survives `docker compose down
+# -v`, and skipping this check whenever the file already existed left .env
+# permanently unfixed on a rerun.
+$certHostname = $cert.GetNameInfo([System.Security.Cryptography.X509Certificates.X509NameType]::DnsName, $false)
+
+if ($certHostname -and $certHostname -ne $targetHost) {
+    $newHostPort = "${certHostname}:${targetPort}"
+    $newHostsLine = if ($userinfo) { "${scheme}://${userinfo}@${newHostPort}" } else { "${scheme}://${newHostPort}" }
+    Set-EnvValue "GRAYLOG_ELASTICSEARCH_HOSTS" $newHostsLine
+    Set-EnvValue "GRAYLOG_WAZUH_INDEXER_HOSTNAME" $certHostname
+    Set-EnvValue "GRAYLOG_WAZUH_INDEXER_IP" $targetHost
+    Write-Host "Rewrote GRAYLOG_ELASTICSEARCH_HOSTS to connect via '$certHostname' (the"
+    Write-Host "certificate's own name) instead of '$targetHost', mapped to $targetHost via"
+    Write-Host "extra_hosts in docker-compose.yml. This avoids a 'Hostname not"
+    Write-Host "verified' error that trusting the certificate alone does not fix."
+} elseif (-not $certHostname) {
+    Write-Warning "Could not read a hostname from the fetched certificate; leaving GRAYLOG_ELASTICSEARCH_HOSTS as-is. If Graylog logs a 'Hostname ... not verified' error, connect via the certificate's CN/SAN manually -- see README Section 5.1."
 }
 
 if ($Pull) {
