@@ -187,6 +187,11 @@ set_env "$main_env" WAZUH_PROD_SSL_VERIFY false
 set_env "$graylog_env" GRAYLOG_PASSWORD_SECRET "$graylog_password_secret"
 set_env "$graylog_env" GRAYLOG_VERSION 7.1.9
 set_env "$graylog_env" GRAYLOG_ELASTICSEARCH_HOSTS "$graylog_elasticsearch_hosts"
+# Wazuh's opensearch.yml ships with compatibility.override_main_response_version
+# by default (for Filebeat-oss, unrelated to Graylog), which makes the indexer
+# falsely report itself as Elasticsearch 7.10.2 and fools Graylog's version
+# probe into the wrong query dialect -- see deploy/graylog/.env.example.
+set_env "$graylog_env" GRAYLOG_ELASTICSEARCH_VERSION "opensearch:2.0.0"
 set_env "$graylog_env" GRAYLOG_ROOT_PASSWORD_SHA2 "$graylog_password_hash"
 set_env "$graylog_env" GRAYLOG_HTTP_EXTERNAL_URI "$graylog_external_uri"
 set_env "$graylog_env" GRAYLOG_SYSLOG_UDP_PORT 2514

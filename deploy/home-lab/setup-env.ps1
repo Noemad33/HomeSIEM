@@ -149,6 +149,11 @@ foreach ($entry in $mainValues.GetEnumerator()) { Set-EnvValue $mainEnv $entry.K
 Set-EnvValue $graylogEnv "GRAYLOG_PASSWORD_SECRET" $graylogSecret
 Set-EnvValue $graylogEnv "GRAYLOG_VERSION" "7.1.9"
 Set-EnvValue $graylogEnv "GRAYLOG_ELASTICSEARCH_HOSTS" $graylogElasticsearchHosts
+# Wazuh's opensearch.yml ships with compatibility.override_main_response_version
+# by default (for Filebeat-oss, unrelated to Graylog), which makes the indexer
+# falsely report itself as Elasticsearch 7.10.2 and fools Graylog's version
+# probe into the wrong query dialect -- see deploy/graylog/.env.example.
+Set-EnvValue $graylogEnv "GRAYLOG_ELASTICSEARCH_VERSION" "opensearch:2.0.0"
 Set-EnvValue $graylogEnv "GRAYLOG_ROOT_PASSWORD_SHA2" $graylogHash
 Set-EnvValue $graylogEnv "GRAYLOG_HTTP_EXTERNAL_URI" $graylogExternalUri
 Set-EnvValue $graylogEnv "GRAYLOG_SYSLOG_UDP_PORT" "2514"

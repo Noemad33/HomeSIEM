@@ -113,6 +113,16 @@ docker compose --env-file deploy/graylog/.env \
 
 See root `README.md` Section 5.2 for what the wrapper does.
 
+One more, permanent mismatch once Graylog is actually connecting: Wazuh's
+`opensearch.yml` ships with `compatibility.override_main_response_version:
+true` by default (for Filebeat-oss, nothing to do with Graylog), which makes
+the indexer falsely report itself as Elasticsearch 7.10.2 and fools
+Graylog's version probe into the wrong query dialect --
+`"key [types] is not supported in the metadata section"` on Input
+Diagnostics, Search, etc. `setup-env` sets `GRAYLOG_ELASTICSEARCH_VERSION`
+in `deploy/graylog/.env` to work around this permanently; see root
+`README.md` Section 5.2 for the full explanation.
+
 Without a Data Node to bootstrap, there is no temporary initialization
 password. Graylog starts directly with the final password configured by
 `GRAYLOG_ROOT_PASSWORD_SHA2` in `deploy/graylog/.env`. Open Graylog at

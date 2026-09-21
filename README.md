@@ -294,6 +294,24 @@ the original host, and records the original host in
 disable hostname verification independently of trust (checked Graylog's
 full configuration reference) -- matching the name is the only fix.
 
+**One more mismatch, and this one is permanent, not a bug to route around.**
+Once Graylog is actually talking to the indexer, expect `"Elasticsearch
+exception ... key [types] is not supported in the metadata section"` on
+pages like Input Diagnostics or Search. Wazuh's own `opensearch.yml` ships
+with `compatibility.override_main_response_version: true` by default (see
+[wazuh/wazuh-packages](https://github.com/wazuh/wazuh-packages/blob/main/stack/indexer/base/files/etc/wazuh-indexer/opensearch.yml),
+commented `# Option to allow Filebeat-oss 7.10.2 to work` -- nothing to do
+with Graylog, and not something this stack should disable on the Wazuh side).
+That setting makes the indexer's root endpoint falsely report itself as
+Elasticsearch 7.10.2, even though it's real OpenSearch 2.x underneath.
+Graylog's automatic version probe trusts that fake response and picks the
+wrong query dialect. `setup-env` sets `GRAYLOG_ELASTICSEARCH_VERSION=opensearch:2.0.0`
+in `deploy/graylog/.env` by default, which disables Graylog's version probe
+entirely and tells it the real distribution directly -- the exact patch
+number doesn't matter, Graylog only checks the major version. This is a
+permanent default for this stack, not a one-time fix; every standard Wazuh
+deployment ships this compatibility flag.
+
 Check all Graylog services:
 
 ```bash

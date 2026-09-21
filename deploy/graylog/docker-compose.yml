@@ -24,6 +24,14 @@ services:
       # are embedded in the URL: scheme://user:pass@host:port. See
       # deploy/graylog/.env.example for the required OpenSearch role caveat.
       GRAYLOG_ELASTICSEARCH_HOSTS: ${GRAYLOG_ELASTICSEARCH_HOSTS}
+      # Wazuh's opensearch.yml sets compatibility.override_main_response_version
+      # (for Filebeat-oss, unrelated to Graylog), which makes the indexer's
+      # root endpoint falsely report itself as Elasticsearch 7.10.2. Graylog's
+      # automatic version probe trusts that and picks the wrong query dialect,
+      # which surfaces as "key [types] is not supported in the metadata
+      # section" on Input Diagnostics, Search, etc. Setting this disables the
+      # probe entirely -- see deploy/graylog/.env.example for the full story.
+      GRAYLOG_ELASTICSEARCH_VERSION: ${GRAYLOG_ELASTICSEARCH_VERSION:-opensearch:2.0.0}
     # Wazuh's certificate is issued to a role name (e.g. "wazuh.indexer"), not
     # an IP, and Java's TLS hostname verification requires the connection
     # host to match that name even once the certificate itself is trusted
