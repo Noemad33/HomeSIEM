@@ -11,6 +11,19 @@ fi
 
 compose=(docker compose -f docker-compose.yml -f deploy/home-lab/docker-compose.override.yml)
 
+# Grafana (UID 472) and InfluxDB (UID 1000) drop root inside their containers
+# and need to own their data dirs before first start. Without this, Docker
+# auto-creates these as root-owned on first `up -d` and both containers
+# crash-loop on a permission error. Safe to rerun.
+mkdir -p data/grafana-data data/influxdb-data data/influxdb-config
+if command -v sudo >/dev/null 2>&1; then
+  sudo chown -R 472:472 data/grafana-data
+  sudo chown -R 1000:1000 data/influxdb-data data/influxdb-config
+else
+  chown -R 472:472 data/grafana-data
+  chown -R 1000:1000 data/influxdb-data data/influxdb-config
+fi
+
 if [[ "${1:-}" == "--pull" ]]; then
   "${compose[@]}" pull
 fi

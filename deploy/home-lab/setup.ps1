@@ -17,6 +17,13 @@ if (-not (Test-Path ".env")) {
     throw "Missing .env. Copy .env.example to .env, set the secrets and Wazuh values, then run this script again."
 }
 
+# Grafana/InfluxDB need their data dirs to exist before first start. Docker
+# Desktop's bind-mount layer does its own UID translation, so no chown
+# equivalent is needed here the way setup.sh needs one on Linux.
+foreach ($dir in @("data\grafana-data", "data\influxdb-data", "data\influxdb-config")) {
+    if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }
+}
+
 if ($Pull) {
     & docker @ComposeArgs pull
     if ($LASTEXITCODE -ne 0) { throw "Docker image pull failed." }
