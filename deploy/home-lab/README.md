@@ -91,12 +91,11 @@ Set `GRAYLOG_PASSWORD_SECRET` to a separate value generated with
 Node -- `deploy/home-lab/setup-env.sh`/`.ps1` set `GRAYLOG_ELASTICSEARCH_HOSTS`
 to point Graylog directly at the Wazuh Indexer's OpenSearch cluster, because
 CoPilot's automatic alert ingestion reads Graylog's `gl-events*` indices
-through the Wazuh-Indexer connector. **This is unproven on a
-security-enabled OpenSearch cluster**: the minimum OpenSearch Security
-privileges a Graylog user needs aren't documented anywhere. Start with the
-Wazuh Indexer admin credentials to confirm the connection works, then narrow
-the role once it's proven working. See the root `README.md` Section 5.1 for
-more detail.
+through the Wazuh-Indexer connector. **Confirmed working with the Wazuh
+Indexer admin credentials** on a security-enabled cluster. The minimum
+OpenSearch Security privileges for a narrower role aren't documented
+anywhere, so that's still untested -- treat the admin account as the
+known-good baseline. See the root `README.md` Section 5.1 for more detail.
 
 TLS trust is the other half of this and always needs fixing: the Wazuh
 Indexer's self-signed certificate isn't trusted by Graylog's Java HTTP

@@ -230,14 +230,14 @@ visible to it. `deploy/home-lab/setup-env.sh`/`.ps1` derive
 URL/credentials you already entered, in the form
 `scheme://user:pass@host:port`.
 
-**This is unproven on a security-enabled OpenSearch cluster.** Neither
-Graylog's nor SOCFortress's documentation specifies the minimum OpenSearch
-Security privileges a Graylog user needs. Start by reusing the Wazuh Indexer
-admin credentials (the default `setup-env` produces) to confirm the
-connection works end to end, then create and test a narrower role before
-treating this as production-ready. Expect to troubleshoot this step; if
-Graylog fails to start or logs OpenSearch authentication/authorization
-errors, check that the embedded user has index-create and index-write
+**Confirmed working with the Wazuh Indexer admin credentials** (the default
+`setup-env` produces) on a security-enabled cluster, alongside the TLS fixes
+below -- Graylog starts cleanly and the UI is reachable. Neither Graylog's
+nor SOCFortress's documentation specifies the minimum OpenSearch Security
+privileges a Graylog user needs, so a narrower, least-privilege role is
+still untested; treat reusing the admin account as the known-good baseline
+and only attempt to narrow it if you want to harden this further. If a
+narrower role does fail, check that it has index-create and index-write
 privileges, not just read/search.
 
 **TLS trust is the other half of this, and it always needs fixing.** The
