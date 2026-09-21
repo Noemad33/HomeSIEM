@@ -12,7 +12,7 @@ Debian 12 VM.
 
 ## Architecture
 
-\`\`\`
+```
 Wazuh agents ----------------------> Wazuh Manager + Indexer (OpenSearch)
                                           |
                                           +--> CoPilot (copilot-mcp)
@@ -30,7 +30,7 @@ InfluxDB --> Grafana (time-series store; deployed but not yet fed by
              anything in this stack -- see Section 10.1)
 
 CoPilot --> optional Velociraptor (DFIR), Shuffle (SOAR), VirusTotal (enrichment)
-\`\`\`
+```
 
 Wazuh, Graylog, and CoPilot are separate Compose projects on the same VM.
 This avoids coupling their certificate, storage, and upgrade lifecycles.
@@ -550,15 +550,15 @@ Add these only after Wazuh, Graylog, and CoPilot are stable.
 
 Data directories:
 
-\`\`\`
+```
 mkdir -p data/grafana-data data/influxdb-data data/influxdb-config
 sudo chown -R 472:472 data/grafana-data      # grafana image runs as UID 472
 sudo chown -R 1000:1000 data/influxdb-data data/influxdb-config
-\`\`\`
+```
 
 Add to `.env` (see also `.env.example`):
 
-\`\`\`
+```
 GRAFANA_ADMIN_USER=admin
 GRAFANA_ADMIN_PASSWORD=<set a real password>
 INFLUXDB_USER=admin
@@ -566,7 +566,7 @@ INFLUXDB_PASSWORD=<8+ chars>
 INFLUXDB_ORG=socfortress
 INFLUXDB_BUCKET=copilot
 INFLUXDB_ADMIN_TOKEN=<long random token>
-\`\`\`
+```
 
 `grafana` and `influxdb` services are defined in `docker-compose.yml`
 alongside the CoPilot services and join the same default network, so
@@ -574,14 +574,14 @@ Grafana can reach `copilot-mcp` and any other container by name.
 
 Grafana needs the OpenSearch plugin, since it isn't bundled:
 
-\`\`\`yaml
+```yaml
     grafana:
         image: grafana/grafana:latest
         environment:
             - GF_PLUGINS_PREINSTALL_SYNC=grafana-opensearch-datasource
             - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
             - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD}
-\`\`\`
+```
 
 `GF_INSTALL_PLUGINS` is deprecated in favor of `GF_PLUGINS_PREINSTALL_SYNC`.
 Double-check the plugin ID is exactly `grafana-opensearch-datasource` --
@@ -625,13 +625,13 @@ Velociraptor manages its own certs/datastore on first run and ships its own
 Compose file, so it runs as a separate project rather than a service block
 in this repo's `docker-compose.yml`:
 
-\`\`\`
+```
 mkdir -p ~/velociraptor && cd ~/velociraptor
 curl -o compose.yaml https://raw.githubusercontent.com/Velocidex/velociraptor/master/Docker/compose.yaml
 curl -o .env https://raw.githubusercontent.com/Velocidex/velociraptor/master/Docker/.env
 # edit .env: VELOCIRAPTOR_HOSTNAME, VELOCIRAPTOR_INITIAL_ADMIN_PASSWORD
 docker compose up -d
-\`\`\`
+```
 
 To connect it to CoPilot: `copilot-mcp` in this repo's `docker-compose.yml`
 already mounts `./data/copilot-mcp/api.config.yaml` as its Velociraptor
@@ -640,24 +640,36 @@ client config**, generated after exposing the API port (default 8001,
 bound to localhost only until `server.config.yaml`'s `API:` block is set to
 `bind_address: 0.0.0.0`) and running:
 
-\`\`\`
+```
 velociraptor --config server.config.yaml config api_client_config \
   --name mcp-service-account > api.config.yaml
 cp api.config.yaml <this repo>/data/copilot-mcp/api.config.yaml
 docker compose restart copilot-mcp
-\`\`\`
+```
+
+The home-lab `setup-env` wrapper sets `MCP_VELOCIRAPTOR_SERVER_ENABLED=false`
+in `.env` by default, since there is nothing to connect to until the steps
+above are done. Once a real `api.config.yaml` is in place, set it to `true`
+in `.env` and restart `copilot-mcp` (the flag above only applies to that
+service) to pick up the change.
+
+Then configure the Velociraptor connector in CoPilot's **Connectors** view
+and verify it. A successful verification should list Velociraptor artifacts;
+if it fails, confirm the API port (default `8001`) is reachable from the
+`copilot-mcp` container and that `api.config.yaml` was generated for the
+same Velociraptor server referenced by `MCP_VELOCIRAPTOR_URL`.
 
 ### 10.3 Shuffle (planned, not yet deployed)
 
 Shuffle bundles its own OpenSearch, backend, frontend, and Orborus worker
 containers, so it also runs as its own project:
 
-\`\`\`
+```
 git clone https://github.com/Shuffle/Shuffle ~/shuffle
 cd ~/shuffle
 sudo chown -R 1000:1000 shuffle-database
 docker compose up -d
-\`\`\`
+```
 
 GUI defaults to port 3443. Wire it in via a Graylog alert webhook or a
 Wazuh active-response script pointed at a Shuffle workflow trigger.
