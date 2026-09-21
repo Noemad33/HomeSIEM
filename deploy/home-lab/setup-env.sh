@@ -85,6 +85,15 @@ read -r -p "Graylog external URL [${graylog_url}/]: " graylog_external_uri
 graylog_external_uri="${graylog_external_uri:-${graylog_url%/}/}"
 read -r -s -p "OpenAI API key (optional, press Enter to skip): " openai_key; echo
 
+# Velociraptor and Talon are typically deployed AFTER this first pass -- accept
+# the defaults below if you haven't stood them up yet, then rerun with --force
+# once they're ready. Both run on the CoPilot VM's LAN address in the
+# single-VM home-lab topology, never localhost or a container name.
+read -r -p "Velociraptor URL (leave default if not deployed yet) [https://${copilot_host}:8000]: " velociraptor_url
+velociraptor_url="${velociraptor_url:-https://${copilot_host}:8000}"
+read -r -p "Talon URL (leave default if not deployed yet) [http://${copilot_host}:3100]: " talon_url
+talon_url="${talon_url:-http://${copilot_host}:3100}"
+
 jwt_secret="$(random_b64 32)"
 sso_secret="$(random_b64 32)"
 totp_key="$(fernet_key)"
@@ -96,6 +105,8 @@ opensearch_token="$(random_hex 32)"
 mysql_token="$(random_hex 32)"
 wazuh_token="$(random_hex 32)"
 velociraptor_token="$(random_hex 32)"
+velociraptor_header_secret="$(random_hex 32)"
+talon_api_key="$(random_hex 32)"
 graylog_password_hash="$(printf '%s' "$graylog_password" | sha256sum | awk '{print $1}')"
 graylog_password_secret="$(random_hex 48)"
 
@@ -142,6 +153,12 @@ set_env "$main_env" MCP_MYSQL_AUTH_TOKEN "$mysql_token"
 set_env "$main_env" MCP_WAZUH_AUTH_TOKEN "$wazuh_token"
 set_env "$main_env" MCP_VELOCIRAPTOR_AUTH_TOKEN "$velociraptor_token"
 set_env "$main_env" MCP_VELOCIRAPTOR_SERVER_ENABLED false
+set_env "$main_env" VELOCIRAPTOR_URL "$velociraptor_url"
+set_env "$main_env" VELOCIRAPTOR_API_HEADER_VALUE "$velociraptor_header_secret"
+# TALON_API_KEY here must be copied into Talon's OWN .env as HTTP_API_KEY --
+# the two projects name the same shared secret differently. See README 10.4.
+set_env "$main_env" TALON_URL "$talon_url"
+set_env "$main_env" TALON_API_KEY "$talon_api_key"
 set_env "$main_env" OPENAI_API_KEY "$openai_key"
 set_env "$main_env" OPENSEARCH_SSL_VERIFY false
 set_env "$main_env" WAZUH_PROD_SSL_VERIFY false
@@ -161,3 +178,9 @@ echo "Graylog points at the Wazuh Indexer's OpenSearch cluster (GRAYLOG_ELASTICS
 echo "deploy/graylog/.env) instead of running its own Data Node -- confirm that connection works"
 echo "before relying on Graylog alerts reaching CoPilot. Start Graylog first, then run:"
 echo "  bash deploy/home-lab/setup.sh --pull --capture-admin-password"
+echo
+echo "Velociraptor and Talon URLs/secrets were written using defaults if you"
+echo "haven't deployed them yet (README Sections 10.2 and 10.4). Rerun this"
+echo "script with --force once they're up to capture their real values, or"
+echo "edit .env directly for VELOCIRAPTOR_URL, TALON_URL, and TALON_API_KEY."
+echo "TALON_API_KEY must be copied into Talon's own .env as HTTP_API_KEY."

@@ -702,6 +702,24 @@ above are done. Once a real `api.config.yaml` is in place, set it to `true`
 in `.env` and restart `copilot-mcp` (the flag above only applies to that
 service) to pick up the change.
 
+`setup-env` also writes two more Velociraptor values you should revisit once
+the server is actually running, since it only has a guessed default the
+first time it runs (before Velociraptor exists to confirm against):
+
+- `VELOCIRAPTOR_URL` -- defaults to `https://<copilot-host>:8000`, assuming
+  Velociraptor runs on the same VM as CoPilot. Update it if Velociraptor
+  ends up on a different host or port. Like the Wazuh/Graylog values in
+  Section 8, the backend does not read this env var directly for the
+  connector itself -- it is a staging value you copy into the **Connector
+  URL** field when configuring Velociraptor in CoPilot's Connectors view
+  below.
+- `VELOCIRAPTOR_API_HEADER_VALUE` -- an auto-generated webhook secret CoPilot
+  expects on **inbound** requests from Velociraptor (e.g. server-side event
+  hooks calling back into CoPilot). This has no effect until you also
+  configure Velociraptor's own server-side webhook/notification config to
+  send this same value as a header -- that configuration lives on the
+  Velociraptor server, not in this repo.
+
 Then configure the Velociraptor connector in CoPilot's **Connectors** view
 and verify it. A successful verification should list Velociraptor artifacts;
 if it fails, confirm the API port (default `8001`) is reachable from the
@@ -725,6 +743,70 @@ Wazuh active-response script pointed at a Shuffle workflow trigger.
 
 Give every additional stack a dedicated host-port plan before starting it.
 Docker host ports are global across all Compose projects on the VM.
+
+### 10.4 Talon (planned, not yet deployed)
+
+Talon is the "agentic SOC analyst" piece: a separate service
+([taylorwalton/talon](https://github.com/taylorwalton/talon)) that
+auto-investigates every OPEN CoPilot alert end to end (SIEM raw event -> IOC
+extraction -> threat-intel enrichment -> MITRE correlation -> a structured
+report with severity and recommended actions written back into CoPilot), and
+also powers the in-app analyst chat. It calls CoPilot's Wazuh/OpenSearch,
+MySQL, Wazuh Manager, Velociraptor, and Shuffle connectors through its own
+set of MCP servers, so deploy it last, after those are proven working.
+
+**This is the heaviest deployment in this runbook** -- Talon's own guide is
+18 steps: Node.js 20+, an OneCLI credential vault, a per-group mount
+allowlist, a systemd service, and a Claude Code OAuth token (ongoing
+Anthropic API usage/cost, not a one-time setup). It is not vendored into
+this repo; follow Talon's own README as the source of truth:
+<https://github.com/taylorwalton/talon#deployment-guide>. What follows here
+is only the HomeSIEM-specific wiring that guide's generic placeholders don't
+know about.
+
+**Values to use when Talon's guide asks for connector credentials**
+(steps 7, 9, 10, 11 of its Deployment Guide):
+
+| Talon's guide asks for... | Use this HomeSIEM value |
+| --- | --- |
+| `siem/.env` `OPENSEARCH_HOSTS/USERNAME/PASSWORD` (step 7) | `WAZUH_INDEXER_URL`/`WAZUH_INDEXER_USERNAME`/`WAZUH_INDEXER_PASSWORD` from `.env` |
+| `mysql/.env` `MYSQL_HOST/PORT/USER/PASS/DB` (step 8) | `copilot-mysql` (container name, only reachable if Talon runs in the same Docker network -- see networking note below), `MYSQL_USER`, `MYSQL_PASSWORD` from `.env`, database `copilot` |
+| `copilot-mcp/.env` `COPILOT_URL/USERNAME/PASSWORD` (step 9) | `http://<VM_IP>:5000` (backend API port, not the `8443` HTTPS frontend), plus a **dedicated non-admin CoPilot analyst account** created for Talon -- do not use the admin login here |
+| `wazuh-mcp/.env` `WAZUH_PROD_URL/USERNAME/PASSWORD` (step 10) | `WAZUH_MANAGER_URL`/`WAZUH_MANAGER_USERNAME`/`WAZUH_MANAGER_PASSWORD` from `.env` |
+| `velociraptor-mcp` `api.config.yaml` (step 11) | The same client config generated in Section 10.2 -- generate a second `--name talon` client config, do not reuse the `copilot-mcp` one |
+
+Use the VM's LAN IP for every URL above, matching the rest of this
+runbook -- not `host.docker.internal` (Talon's guide defaults to this for
+same-host deployments, but whether it resolves depends on Talon's own
+container networking, which this repo does not control) and not `localhost`.
+
+**Networking:** Talon runs as its own systemd service on the VM host
+(outside this repo's `docker-compose.yml`), listening on `3100`. Step 8's
+MySQL connection is the one exception to "use the LAN IP" above -- it only
+works as `copilot-mysql` if Talon's containers join this repo's Docker
+network; otherwise point it at the VM's LAN IP and CoPilot's published MySQL
+port too. `deploy/home-lab/docker-compose.override.yml` removes MySQL's host
+port publishing by default (`deploy/home-lab/README.md` Section 3) -- restore
+it or add Talon to the `copilot` Docker network if you hit this.
+
+**Wiring Talon back into CoPilot** (after Talon is verified with the `curl`
+commands in its guide's step 18):
+
+1. In `.env`, `TALON_URL` and `TALON_API_KEY` were written by `setup-env`
+   with a guessed default (`http://<copilot-host>:3100` and a random
+   secret). Confirm `TALON_URL` is correct now that Talon is actually
+   running.
+2. Copy that same `TALON_API_KEY` value into Talon's own `.env` as
+   `HTTP_API_KEY` -- **the two projects name this identical shared secret
+   differently.** A mismatch here is the most likely first-connection
+   failure.
+3. In CoPilot's **Connectors** view, find **Talon** and enter `TALON_URL` as
+   the Connector URL and `TALON_API_KEY` as the API key, then verify. A
+   successful verification calls Talon's unauthenticated `/health` endpoint.
+4. Trigger a test investigation on a real alert (or via the chat UI) and
+   confirm a report appears against that alert in CoPilot before enabling
+   Talon's 15-minute scheduled sweep for every OPEN alert.
+
 ## Operations
 
 ```bash

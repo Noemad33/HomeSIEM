@@ -255,7 +255,10 @@ Deploy Velociraptor 0.7.x, enroll only lab endpoints first, and create the
 read-only API configuration mounted at `data/copilot-mcp/api.config.yaml`.
 Configure the Velociraptor connector and prove artifact collection works.
 Keep quarantine and other disruptive actions manual until the workflow has
-been tested against a disposable endpoint.
+been tested against a disposable endpoint. `setup-env` writes a guessed
+`VELOCIRAPTOR_URL` and a random `VELOCIRAPTOR_API_HEADER_VALUE` into `.env`
+before Velociraptor exists to confirm against -- revisit both once it's
+running. See root `README.md` Section 10.2 for the full walkthrough.
 
 ### Shuffle
 
@@ -272,9 +275,17 @@ CoPilot known-good baseline is Grafana 12.3.3 and InfluxDB v2 API support.
 
 ### Talon
 
-Talon is optional. Enable it only after Wazuh search and Velociraptor
-collection are reliable. Keep AI-triggered investigations disabled until you
-have reviewed the prompt/data boundaries and notification routes.
+Talon is the agentic SOC analyst -- a separate service
+([taylorwalton/talon](https://github.com/taylorwalton/talon)) that
+auto-investigates alerts and writes reports back into CoPilot. Deploy it
+last, after Wazuh search, Graylog alert ingestion, and Velociraptor
+collection are all reliable, since Talon depends on all three through its
+own MCP connectors. It is a much heavier deployment than the others (18
+steps, its own OneCLI credential vault, a systemd service, an ongoing
+Anthropic API cost) -- see root `README.md` Section 10.4 for the
+HomeSIEM-specific values to use at each step, and Talon's own README for the
+full guide. Keep AI-triggered investigations disabled until you have
+reviewed the prompt/data boundaries and notification routes.
 
 ## Security and operations checklist
 

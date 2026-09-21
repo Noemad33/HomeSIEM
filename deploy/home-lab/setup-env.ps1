@@ -81,6 +81,15 @@ $graylogExternalUri = Read-Host "Graylog external URL [$($graylogUrl.TrimEnd('/'
 if (-not $graylogExternalUri) { $graylogExternalUri = "$($graylogUrl.TrimEnd('/'))/" }
 $openAiKey = Read-Secret "OpenAI API key (press Enter to skip)"
 
+# Velociraptor and Talon are typically deployed AFTER this first pass -- accept
+# the defaults below if you haven't stood them up yet, then rerun with -Force
+# once they're ready. Both run on the CoPilot VM's LAN address in the
+# single-VM home-lab topology, never localhost or a container name.
+$velociraptorUrl = Read-Host "Velociraptor URL (leave default if not deployed yet) [https://${copilotHost}:8000]"
+if (-not $velociraptorUrl) { $velociraptorUrl = "https://${copilotHost}:8000" }
+$talonUrl = Read-Host "Talon URL (leave default if not deployed yet) [http://${copilotHost}:3100]"
+if (-not $talonUrl) { $talonUrl = "http://${copilotHost}:3100" }
+
 $jwt = New-RandomBase64
 $sso = New-RandomBase64
 $totp = New-FernetKey
@@ -92,6 +101,8 @@ $openSearchToken = New-RandomHex 32
 $mysqlToken = New-RandomHex 32
 $wazuhToken = New-RandomHex 32
 $veloToken = New-RandomHex 32
+$veloHeaderSecret = New-RandomHex 32
+$talonApiKey = New-RandomHex 32
 $graylogSecret = New-RandomHex 48
 $sha256 = [Security.Cryptography.SHA256]::Create()
 $hashBytes = $sha256.ComputeHash([Text.Encoding]::UTF8.GetBytes($graylogPassword))
@@ -116,6 +127,10 @@ $mainValues = @{
     GRAYLOG_NETWORK_URL = $graylogUrl; GRAYLOG_NETWORK_USERNAME = "admin"; GRAYLOG_NETWORK_PASSWORD = $graylogPassword
     GRAYLOG_API_HEADER_VALUE = $webhook; MCP_OPENSEARCH_AUTH_TOKEN = $openSearchToken; MCP_MYSQL_AUTH_TOKEN = $mysqlToken
     MCP_WAZUH_AUTH_TOKEN = $wazuhToken; MCP_VELOCIRAPTOR_AUTH_TOKEN = $veloToken; MCP_VELOCIRAPTOR_SERVER_ENABLED = "false"; OPENAI_API_KEY = $openAiKey
+    VELOCIRAPTOR_URL = $velociraptorUrl; VELOCIRAPTOR_API_HEADER_VALUE = $veloHeaderSecret
+    # TALON_API_KEY here must be copied into Talon's OWN .env as HTTP_API_KEY --
+    # the two projects name the same shared secret differently. See README 10.4.
+    TALON_URL = $talonUrl; TALON_API_KEY = $talonApiKey
     OPENSEARCH_SSL_VERIFY = "false"; WAZUH_PROD_SSL_VERIFY = "false"
 }
 foreach ($entry in $mainValues.GetEnumerator()) { Set-EnvValue $mainEnv $entry.Key $entry.Value }
@@ -132,3 +147,9 @@ Write-Host "The Graylog admin password was not written to either file. Store it 
 Write-Host "Graylog points at the Wazuh Indexer's OpenSearch cluster (GRAYLOG_ELASTICSEARCH_HOSTS in"
 Write-Host "deploy\graylog\.env) instead of running its own Data Node -- confirm that connection works"
 Write-Host "before relying on Graylog alerts reaching CoPilot. Start Graylog first, then run setup.ps1."
+Write-Host ""
+Write-Host "Velociraptor and Talon URLs/secrets were written using defaults if you"
+Write-Host "haven't deployed them yet (README Sections 10.2 and 10.4). Rerun this"
+Write-Host "script with -Force once they're up to capture their real values, or"
+Write-Host "edit .env directly for VELOCIRAPTOR_URL, TALON_URL, and TALON_API_KEY."
+Write-Host "TALON_API_KEY must be copied into Talon's own .env as HTTP_API_KEY."
