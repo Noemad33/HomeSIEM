@@ -149,9 +149,20 @@ The wrapper creates:
 deploy/graylog/.env
 ```
 
-It generates internal database, JWT, Fernet, MCP, webhook, and Graylog secrets.
-It prompts for Wazuh URLs and credentials, the final Graylog admin password,
-the Graylog URL, the CoPilot hostname, and the CoPilot HTTPS port.
+It generates internal database, JWT, Fernet, MCP, webhook, Graylog, Grafana,
+and InfluxDB secrets, and derives `GRAYLOG_ELASTICSEARCH_HOSTS` (Section 5.1)
+from the Wazuh Indexer values below. It prompts for Wazuh URLs and
+credentials, the final Graylog admin password, the Graylog URL, the CoPilot
+hostname, and the CoPilot HTTPS port -- plus Velociraptor and Talon URLs
+(Sections 10.2 and 10.4), which are safe to leave at their same-VM defaults
+if you haven't deployed those yet and revisit with `--force` later.
+
+After it runs, every value needed for Wazuh, Graylog, CoPilot, Grafana, and
+InfluxDB is filled in -- nothing left to hand-edit for those. The only
+`.env` values still at their `REPLACE_*` placeholder afterward are optional
+third-party integrations this runbook doesn't cover (Shuffle, Sublime,
+VirusTotal, Resend, Portainer); leave them alone unless you're specifically
+setting one of those up.
 
 Use these answers when all services run on one VM with address `192.168.1.50`:
 
@@ -167,9 +178,12 @@ Wazuh Manager password: <Wazuh Manager API password>
 Graylog URL: http://192.168.1.50:9000
 Graylog admin password: <password selected for Graylog>
 Graylog external URL: http://192.168.1.50:9000/
+OpenAI API key: <press Enter to skip if unused>
+Velociraptor URL: <press Enter to accept the same-VM default if not deployed yet>
+Talon URL: <press Enter to accept the same-VM default if not deployed yet>
 ```
 
-The important generated values are:
+The important generated or derived values are:
 
 ```dotenv
 SERVER_HOST=192.168.1.50
@@ -180,6 +194,11 @@ WAZUH_MANAGER_URL=https://192.168.1.50:55000
 WAZUH_PROD_URL=https://192.168.1.50:55000
 GRAYLOG_URL=http://192.168.1.50:9000
 ```
+
+(`deploy/graylog/.env`'s `GRAYLOG_ELASTICSEARCH_HOSTS` is derived from the
+Wazuh Indexer values above -- see Section 5.1. Grafana/InfluxDB credentials
+and Velociraptor/Talon URLs are generated too, but have no VM-address-specific
+form worth listing here.)
 
 The wrapper stores only the SHA-256 hash of the final Graylog password in
 `deploy/graylog/.env`. Keep the plaintext password in a password manager.
