@@ -47,6 +47,8 @@ wheels/
 *.db-journal
 .env
 deploy/graylog/.env
+deploy/graylog/wazuh-indexer-ca.pem
+deploy/graylog/graylog-truststore.jks
 data/copilot-admin-password.txt
 .env.*
 !.env.example

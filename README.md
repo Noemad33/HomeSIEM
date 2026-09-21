@@ -240,14 +240,41 @@ Graylog fails to start or logs OpenSearch authentication/authorization
 errors, check that the embedded user has index-create and index-write
 privileges, not just read/search.
 
+**TLS trust is the other half of this, and it always needs fixing.** The
+Wazuh Indexer's certificate is self-signed, and unlike CoPilot's Python
+client (`OPENSEARCH_SSL_VERIFY=false`), Graylog's Java HTTP client has no
+"skip verification" setting -- it rejects an untrusted certificate outright,
+which shows up as `VersionProbe ... Indexer is not available` retrying
+forever with a `certificate_unknown` error in the logs. Section 5.2's start
+script handles this automatically; you should not need to touch Java
+truststores by hand.
+
 ### 5.2 Start Graylog
 
 ```bash
-docker compose \
-  --env-file deploy/graylog/.env \
-  -f deploy/graylog/docker-compose.yml \
-  up -d
+bash deploy/graylog/start.sh
 ```
+
+On Windows PowerShell:
+
+```powershell
+.\deploy\graylog\start.ps1
+```
+
+This does three things: fetches the certificate the Wazuh Indexer actually
+presents on first run (via a plain TCP/TLS handshake, no filesystem access to
+the Wazuh host needed), builds a Java truststore containing it using the
+Graylog image's own bundled `keytool` (no local Java required), then starts
+Graylog with `GRAYLOG_SERVER_JAVA_OPTS` pointed at that truststore. The
+fetched certificate is trusted directly (not chained to a root CA) -- the
+same practical trust level as `SSL_VERIFY=false` elsewhere in this stack,
+just implemented as an explicit, inspectable pin instead of a blanket skip.
+The result is cached at `deploy/graylog/graylog-truststore.jks`; rerun with
+`--force-trust` / `-ForceTrust` if the Wazuh Indexer's certificate ever
+rotates. Do not run `docker compose up` directly against
+`deploy/graylog/docker-compose.yml` on a fresh checkout -- that file won't
+exist yet, and Docker will bind-mount an empty directory in its place instead
+of failing loudly.
 
 Check all Graylog services:
 
@@ -382,10 +409,7 @@ OpenSearch data before upgrading (Graylog itself is stateless aside from
 the Graylog services:
 
 ```bash
-docker compose --env-file deploy/graylog/.env \
-  -f deploy/graylog/docker-compose.yml pull
-docker compose --env-file deploy/graylog/.env \
-  -f deploy/graylog/docker-compose.yml up -d
+bash deploy/graylog/start.sh --pull
 ```
 
 Check the resulting images and logs:

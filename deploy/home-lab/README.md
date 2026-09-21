@@ -98,16 +98,21 @@ Wazuh Indexer admin credentials to confirm the connection works, then narrow
 the role once it's proven working. See the root `README.md` Section 5.1 for
 more detail.
 
-Start the Graylog project:
+TLS trust is the other half of this and always needs fixing: the Wazuh
+Indexer's self-signed certificate isn't trusted by Graylog's Java HTTP
+client by default, which shows up as `VersionProbe` retrying forever with a
+`certificate_unknown` error. Start the Graylog project with the wrapper that
+handles this automatically -- do not run `docker compose up` directly
+against `deploy/graylog/docker-compose.yml` on a fresh checkout, the
+truststore file it mounts won't exist yet:
 
 ```bash
-docker compose --env-file deploy/graylog/.env \
-  -f deploy/graylog/docker-compose.yml up -d
-docker compose --env-file deploy/graylog/.env \
-  -f deploy/graylog/docker-compose.yml ps
+bash deploy/graylog/start.sh
 docker compose --env-file deploy/graylog/.env \
   -f deploy/graylog/docker-compose.yml logs --tail=200
 ```
+
+See root `README.md` Section 5.2 for what the wrapper does.
 
 Without a Data Node to bootstrap, there is no temporary initialization
 password. Graylog starts directly with the final password configured by
