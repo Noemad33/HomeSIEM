@@ -281,6 +281,19 @@ certificate ever rotates. Do not run `docker compose up` directly against
 `certificates` directory will be empty and Graylog will keep rejecting the
 Wazuh Indexer's certificate.
 
+Trusting the certificate is not the whole fix. Wazuh issues certificates to
+a role name (e.g. `wazuh.indexer`), not an IP, and Java's TLS hostname
+verification rejects a connection made by IP even once the certificate
+itself is trusted -- this shows up as a *different* error, `Hostname ...
+not verified`, after the `certificate_unknown` one is gone. The start
+script handles this too: it reads the name out of the fetched certificate,
+switches `GRAYLOG_ELASTICSEARCH_HOSTS` to connect via that name instead of
+the original host, and records the original host in
+`GRAYLOG_WAZUH_INDEXER_IP` so Docker's `extra_hosts` (in
+`docker-compose.yml`) can still resolve it. There is no Graylog setting to
+disable hostname verification independently of trust (checked Graylog's
+full configuration reference) -- matching the name is the only fix.
+
 Check all Graylog services:
 
 ```bash

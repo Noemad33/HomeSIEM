@@ -24,6 +24,14 @@ services:
       # are embedded in the URL: scheme://user:pass@host:port. See
       # deploy/graylog/.env.example for the required OpenSearch role caveat.
       GRAYLOG_ELASTICSEARCH_HOSTS: ${GRAYLOG_ELASTICSEARCH_HOSTS}
+    # Wazuh's certificate is issued to a role name (e.g. "wazuh.indexer"), not
+    # an IP, and Java's TLS hostname verification requires the connection
+    # host to match that name even once the certificate itself is trusted
+    # (via /certificates below). deploy/graylog/start.sh/.ps1 read the name
+    # out of the fetched certificate, switch GRAYLOG_ELASTICSEARCH_HOSTS to
+    # use it, and set these two so Docker can still resolve it.
+    extra_hosts:
+      - "${GRAYLOG_WAZUH_INDEXER_HOSTNAME:-wazuh-indexer-hostname-unset}:${GRAYLOG_WAZUH_INDEXER_IP:-127.0.0.1}"
     volumes:
       - graylog-data:/usr/share/graylog/data
       # Graylog's Java HTTP client rejects the Wazuh Indexer's self-signed
