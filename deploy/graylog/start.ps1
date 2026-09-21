@@ -13,9 +13,6 @@ if (-not (Test-Path ".env")) {
 }
 
 $envLines = Get-Content ".env"
-$graylogVersion = ($envLines | Where-Object { $_ -match "^GRAYLOG_VERSION=" }) -replace "^GRAYLOG_VERSION=", ""
-if (-not $graylogVersion) { $graylogVersion = "7.1.9" }
-
 $hostsLine = ($envLines | Where-Object { $_ -match "^GRAYLOG_ELASTICSEARCH_HOSTS=" }) -replace "^GRAYLOG_ELASTICSEARCH_HOSTS=", ""
 if (-not $hostsLine) {
     throw "GRAYLOG_ELASTICSEARCH_HOSTS is not set in deploy\graylog\.env."
@@ -27,16 +24,20 @@ $hostPort = ($hostsLine -replace "^[a-zA-Z]+://", "" -replace ".*@", "") -split 
 $targetHost, $targetPortText = $hostPort -split ":", 2
 $targetPort = if ($targetPortText) { [int]$targetPortText } else { 9200 }
 
-$trustStorePath = Join-Path $GraylogDir "graylog-truststore.jks"
-$certPath = Join-Path $GraylogDir "wazuh-indexer-ca.pem"
-
 # Graylog's self-managed OpenSearch mode has no "skip TLS verification"
-# option (unlike CoPilot's OPENSEARCH_SSL_VERIFY=false) -- it uses a real
-# Java truststore. Trust the certificate the indexer actually presents
-# directly, rather than hunting for a separate root CA file on the Wazuh
-# host; this is the same practical trust level as SSL_VERIFY=false, just
-# implemented as an explicit, inspectable pin instead of a blanket skip.
-if ((-not (Test-Path $trustStorePath)) -or $ForceTrust) {
+# option (unlike CoPilot's OPENSEARCH_SSL_VERIFY=false). The official image's
+# own entrypoint (docker-entrypoint.sh, setupCertificates()) handles this
+# properly: it imports every *.crt file under a mounted /certificates
+# directory into a fresh copy of the container's own JVM truststore on every
+# start, no GRAYLOG_SERVER_JAVA_OPTS wrangling required -- that env var has a
+# history of being unreliable in this image and is NOT used here. We only
+# need to drop the certificate file in place; docker-compose.yml mounts
+# ./certificates into /certificates.
+$certDir = Join-Path $GraylogDir "certificates"
+if (-not (Test-Path $certDir)) { New-Item -ItemType Directory -Force -Path $certDir | Out-Null }
+$certPath = Join-Path $certDir "wazuh-indexer.crt"
+
+if ((-not (Test-Path $certPath)) -or $ForceTrust) {
     Write-Host "Fetching TLS certificate presented by ${targetHost}:${targetPort} ..."
     $tcpClient = New-Object System.Net.Sockets.TcpClient($targetHost, $targetPort)
     $sslStream = New-Object System.Net.Security.SslStream($tcpClient.GetStream(), $false, ({ $true }))
@@ -49,19 +50,9 @@ if ((-not (Test-Path $trustStorePath)) -or $ForceTrust) {
         [Convert]::ToBase64String($cert.RawData, "InsertLineBreaks") +
         "`n-----END CERTIFICATE-----"
     Set-Content -Path $certPath -Value $pem -NoNewline
-
-    Write-Host "Building Graylog truststore (uses the Graylog image's own JVM/keytool, no local Java needed) ..."
-    if (Test-Path $trustStorePath) { Remove-Item $trustStorePath -Force }
-    & docker run --rm -v "${GraylogDir}:/certs" "graylog/graylog:${graylogVersion}" `
-        keytool -importcert -noprompt `
-            -keystore /certs/graylog-truststore.jks `
-            -storepass changeit `
-            -alias wazuh-indexer `
-            -file /certs/wazuh-indexer-ca.pem
-    if ($LASTEXITCODE -ne 0) { throw "keytool failed to build the truststore." }
-    Write-Host "Wrote deploy\graylog\graylog-truststore.jks"
+    Write-Host "Wrote deploy\graylog\certificates\wazuh-indexer.crt"
 } else {
-    Write-Host "Reusing existing deploy\graylog\graylog-truststore.jks (rerun with -ForceTrust to rebuild, e.g. after the Wazuh Indexer's certificate rotates)."
+    Write-Host "Reusing existing deploy\graylog\certificates\wazuh-indexer.crt (rerun with -ForceTrust to refetch, e.g. after the Wazuh Indexer's certificate rotates)."
 }
 
 if ($Pull) {

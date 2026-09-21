@@ -104,7 +104,7 @@ client by default, which shows up as `VersionProbe` retrying forever with a
 `certificate_unknown` error. Start the Graylog project with the wrapper that
 handles this automatically -- do not run `docker compose up` directly
 against `deploy/graylog/docker-compose.yml` on a fresh checkout, the
-truststore file it mounts won't exist yet:
+`certificates` directory it mounts will be empty:
 
 ```bash
 bash deploy/graylog/start.sh

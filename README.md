@@ -261,20 +261,25 @@ On Windows PowerShell:
 .\deploy\graylog\start.ps1
 ```
 
-This does three things: fetches the certificate the Wazuh Indexer actually
-presents on first run (via a plain TCP/TLS handshake, no filesystem access to
-the Wazuh host needed), builds a Java truststore containing it using the
-Graylog image's own bundled `keytool` (no local Java required), then starts
-Graylog with `GRAYLOG_SERVER_JAVA_OPTS` pointed at that truststore. The
+This fetches the certificate the Wazuh Indexer actually presents (via a
+plain TCP/TLS handshake, no filesystem access to the Wazuh host needed) into
+`deploy/graylog/certificates/wazuh-indexer.crt`, then starts Graylog. The
+official Graylog image's own entrypoint does the rest: on every container
+start, it imports every `*.crt` file under a mounted `/certificates`
+directory into a fresh copy of its own JVM truststore automatically (see
+`docker-entrypoint.sh`'s `setupCertificates()` in the
+[graylog-docker](https://github.com/Graylog2/graylog-docker) source, on the
+branch matching this repo's pinned `7.1.9`) -- no `GRAYLOG_SERVER_JAVA_OPTS`
+or manual `keytool` step needed; that env var has a documented history of
+being unreliable in this image and this repo does not rely on it. The
 fetched certificate is trusted directly (not chained to a root CA) -- the
 same practical trust level as `SSL_VERIFY=false` elsewhere in this stack,
 just implemented as an explicit, inspectable pin instead of a blanket skip.
-The result is cached at `deploy/graylog/graylog-truststore.jks`; rerun with
-`--force-trust` / `-ForceTrust` if the Wazuh Indexer's certificate ever
-rotates. Do not run `docker compose up` directly against
-`deploy/graylog/docker-compose.yml` on a fresh checkout -- that file won't
-exist yet, and Docker will bind-mount an empty directory in its place instead
-of failing loudly.
+Rerun with `--force-trust` / `-ForceTrust` if the Wazuh Indexer's
+certificate ever rotates. Do not run `docker compose up` directly against
+`deploy/graylog/docker-compose.yml` on a fresh checkout -- the
+`certificates` directory will be empty and Graylog will keep rejecting the
+Wazuh Indexer's certificate.
 
 Check all Graylog services:
 
