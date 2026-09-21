@@ -28,7 +28,7 @@ if [[ "${1:-}" == "--capture-admin-password" || "${2:-}" == "--capture-admin-pas
     password=""
     while (( SECONDS < deadline )) && [[ -z "$password" ]]; do
       password=$("${compose[@]}" logs --no-color --since 10m copilot-backend 2>&1 |
-        sed -nE 's/.*Admin user password[[:space:]]*:?[[:space:]]*(.*)$/\1/p' | tail -n 1)
+        sed -nE "s/.*plain='([^']+)'.*/\1/p" | tail -n 1)
       [[ -n "$password" ]] || sleep 3
     done
     if [[ -n "$password" ]]; then

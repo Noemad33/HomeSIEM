@@ -15,6 +15,7 @@ services:
       GRAYLOG_DATANODE_NODE_ID_FILE: /var/lib/graylog-datanode/node-id
       GRAYLOG_DATANODE_PASSWORD_SECRET: ${GRAYLOG_PASSWORD_SECRET}
       GRAYLOG_DATANODE_MONGODB_URI: mongodb://mongodb:27017/graylog
+      GRAYLOG_DATANODE_OPENSEARCH_HEAP: ${GRAYLOG_DATANODE_OPENSEARCH_HEAP:-8g}
     volumes:
       - graylog-datanode-data:/var/lib/graylog-datanode
     depends_on:

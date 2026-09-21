@@ -59,6 +59,13 @@ stable release used by this deployment. Keep both Graylog images on the same
 version. Graylog 7.1 requires MongoDB 7.x, which is why this stack uses
 `mongo:7.0`.
 
+The Data Node OpenSearch heap defaults to `8g` in
+`deploy/graylog/.env`. Graylog may display a warning recommending half of the
+VM's RAM, but that generic recommendation is not a target for this home stack.
+Leave headroom for Wazuh, Graylog, MongoDB, Docker, and Debian. Increase the
+heap to `16g` only after monitoring actual memory pressure and ingest volume;
+do not jump directly to `62g`.
+
 Restrict these ports to the LAN or VPN. Do not expose service administration
 ports directly to the public internet.
 
@@ -371,6 +378,11 @@ That file is ignored by Git and is not overwritten. If the database already
 exists, no new password is emitted; use the existing account or the supported
 account-recovery process.
 
+The backend log formats the generated credential as `plain='...'`. The setup
+wrapper extracts only that plaintext value rather than saving the surrounding
+length and hash fields. Change the password immediately after first login and
+rotate the generated credential if it was exposed in logs or terminal output.
+
 On Windows PowerShell:
 
 ```powershell
@@ -404,9 +416,95 @@ After login:
 4. Configure and test the Wazuh Manager connector.
 5. Configure and test the Wazuh Indexer connector.
 6. Configure and test the Graylog connector.
-7. Use the Graylog credentials and URL from `.env`.
-8. Create a `HOME` customer code.
-9. Associate the test agent with `HOME`.
+7. Create a `HOME` customer code.
+8. Associate the test agent with `HOME`.
+
+### 8.1 Configure Wazuh Manager
+
+Open **Connectors** from the CoPilot navigation. Find **Wazuh-Manager** and
+open its configuration form. Use the Wazuh Manager API values from `.env`:
+
+```text
+Connector URL: https://VM_IP:55000
+Username:      WAZUH_MANAGER_USERNAME
+Password:      WAZUH_MANAGER_PASSWORD
+```
+
+For example:
+
+```text
+Connector URL: https://192.168.1.50:55000
+Username:      wazuh-wui
+Password:      <Wazuh Manager API password>
+```
+
+Save the connector, then select its **Verify** or **Test connection** action.
+A successful verification should authenticate to the Manager API and allow
+CoPilot to retrieve agent inventory. If it fails, check that port `55000` is
+reachable from the CoPilot container and that these are Wazuh API credentials,
+not Wazuh dashboard or Indexer credentials.
+
+### 8.2 Configure Wazuh Indexer
+
+In **Connectors**, find **Wazuh-Indexer** and open its configuration form.
+Use the Wazuh Indexer/OpenSearch credentials, not the Manager API password:
+
+```text
+Connector URL: https://VM_IP:9200
+Username:      WAZUH_INDEXER_USERNAME
+Password:      WAZUH_INDEXER_PASSWORD
+```
+
+For example:
+
+```text
+Connector URL: https://192.168.1.50:9200
+Username:      admin
+Password:      <Wazuh Indexer password>
+```
+
+Save and verify the connector. A successful verification should allow CoPilot
+to query cluster health and search Wazuh event indices. If verification fails,
+check port `9200`, the Indexer password, and the self-signed TLS setting. For
+the initial self-signed test, keep this in the CoPilot `.env`:
+
+```dotenv
+OPENSEARCH_SSL_VERIFY=false
+```
+
+Enable verification later when the Indexer certificate is trusted by the VM.
+
+### 8.3 Configure Graylog
+
+In **Connectors**, find **Graylog** and open its configuration form. Use the
+Graylog URL and final Graylog administrator credentials:
+
+```text
+Connector URL: http://VM_IP:9000
+Username:      admin
+Password:      <final Graylog administrator password>
+```
+
+For example:
+
+```text
+Connector URL: http://192.168.1.50:9000
+Username:      admin
+Password:      <Graylog password selected during setup>
+```
+
+Save and verify the connector. A successful verification should allow CoPilot
+to read Graylog health and management data. The Graylog API/header secret is
+separate from the connector password: keep `GRAYLOG_API_HEADER_VALUE` in
+`.env` for CoPilot webhook and alert-injection routes. It is not entered as
+the Graylog login password.
+
+After verification, open CoPilot's Graylog management view and confirm that
+the `UDM Firewall` stream and running Syslog input are visible. Confirm that
+the Graylog test event can be searched before creating a case.
+
+Keep Graylog and CoPilot on a private network. Do not expose connector
+credentials or `.env` to the browser, Git, or support logs.
 
 ## 9. Test the monitoring loop
 

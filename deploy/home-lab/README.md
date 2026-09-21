@@ -190,7 +190,7 @@ bash deploy/home-lab/setup.sh --pull --capture-admin-password
 ```
 
 The capture option watches the backend logs for the first-run `Admin user
-password` line and saves only the password to
+password` line, extracts its `plain='...'` value, and saves only the password to
 `data/copilot-admin-password.txt`. That file is ignored by Git and is never
 overwritten. If the CoPilot database already exists, no password is emitted;
 the wrapper reports that condition and you must use the existing administrator

@@ -38,7 +38,7 @@ if ($CaptureAdminPassword) {
         $password = $null
         while ((Get-Date) -lt $deadline -and -not $password) {
             $logs = & docker @ComposeArgs logs --no-color --since 10m copilot-backend 2>&1
-            $match = $logs | Select-String -Pattern "Admin user password\s*:?\s*(.+)$" | Select-Object -Last 1
+            $match = $logs | Select-String -Pattern "plain='([^']+)'" | Select-Object -Last 1
             if ($match) { $password = $match.Matches[0].Groups[1].Value.Trim() }
             if (-not $password) { Start-Sleep -Seconds 3 }
         }

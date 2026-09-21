@@ -139,6 +139,7 @@ set_env "$main_env" WAZUH_PROD_SSL_VERIFY false
 
 set_env "$graylog_env" GRAYLOG_PASSWORD_SECRET "$graylog_password_secret"
 set_env "$graylog_env" GRAYLOG_VERSION 7.1.9
+set_env "$graylog_env" GRAYLOG_DATANODE_OPENSEARCH_HEAP 8g
 set_env "$graylog_env" GRAYLOG_ROOT_PASSWORD_SHA2 "$graylog_password_hash"
 set_env "$graylog_env" GRAYLOG_HTTP_EXTERNAL_URI "$graylog_external_uri"
 set_env "$graylog_env" GRAYLOG_SYSLOG_UDP_PORT 2514
