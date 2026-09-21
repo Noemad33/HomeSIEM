@@ -12,18 +12,34 @@ Debian 12 VM.
 
 ## Architecture
 
-```text
-Wazuh agents ----------------------> Wazuh Manager + Indexer
+\`\`\`
+Wazuh agents ----------------------> Wazuh Manager + Indexer (OpenSearch)
                                           |
-                                          +--> CoPilot
+                                          +--> CoPilot (copilot-mcp)
+                                          +--> Grafana (OpenSearch data source)
 
 UDM / network devices --> Graylog --> CoPilot
+                              |
+                              +--> its own OpenSearch/Elasticsearch backend
+                                   (confirm via Graylog System > Indices;
+                                    not currently the same cluster as the
+                                    Wazuh Indexer above -- verified via
+                                    _cat/indices)
 
-CoPilot --> optional Velociraptor, Shuffle, enrichment, and dashboards
-```
+InfluxDB --> Grafana (time-series store; deployed but not yet fed by
+             anything in this stack -- see Section 10.1)
+
+CoPilot --> optional Velociraptor (DFIR), Shuffle (SOAR), VirusTotal (enrichment)
+\`\`\`
 
 Wazuh, Graylog, and CoPilot are separate Compose projects on the same VM.
 This avoids coupling their certificate, storage, and upgrade lifecycles.
+
+Grafana and InfluxDB currently run as additional services inside the root
+`docker-compose.yml` (the CoPilot project), rather than as their own Compose
+project. This couples their lifecycle to CoPilot's for now; moving them to a
+dedicated `deploy/monitoring/` project later would match the pattern used
+for Graylog, but isn't required for them to function.
 
 ## 1. Prepare the VM
 
@@ -53,6 +69,12 @@ Reserve these host ports:
 | Graylog | `2514/udp` | UDM syslog |
 | Graylog | `2515/tcp` | UDM syslog |
 | CoPilot | `8443` | HTTPS frontend |
+| Grafana      | `3000`  | Dashboards (OpenSearch + InfluxDB)                 |
+| InfluxDB     | `8086`  | Time-series API (deployed, currently unused)       |
+| Velociraptor | `8000`  | Agent/frontend (not yet deployed)                  |
+| Velociraptor | `8889`  | Web GUI (not yet deployed)                         |
+| Velociraptor | `8001`  | API, consumed by copilot-mcp (not yet deployed)    |
+| Shuffle      | `3443`  | Web UI (not yet deployed)                          |
 
 This repository pins Graylog and Graylog Data Node to `7.1.9`, the current
 stable release used by this deployment. Keep both Graylog images on the same
@@ -522,16 +544,126 @@ actions until this loop is reliable.
 
 ## 10. Add optional services
 
-Add these only after Wazuh, Graylog, and CoPilot are stable:
+Add these only after Wazuh, Graylog, and CoPilot are stable.
 
-- Velociraptor for read-only endpoint collection, then controlled response
-- Shuffle for notifications and approval-gated automation
-- VirusTotal for enrichment
-- Grafana and InfluxDB for infrastructure dashboards
+### 10.1 Grafana + InfluxDB (done)
+
+Data directories:
+
+\`\`\`
+mkdir -p data/grafana-data data/influxdb-data data/influxdb-config
+sudo chown -R 472:472 data/grafana-data      # grafana image runs as UID 472
+sudo chown -R 1000:1000 data/influxdb-data data/influxdb-config
+\`\`\`
+
+Add to `.env` (see also `.env.example`):
+
+\`\`\`
+GRAFANA_ADMIN_USER=admin
+GRAFANA_ADMIN_PASSWORD=<set a real password>
+INFLUXDB_USER=admin
+INFLUXDB_PASSWORD=<8+ chars>
+INFLUXDB_ORG=socfortress
+INFLUXDB_BUCKET=copilot
+INFLUXDB_ADMIN_TOKEN=<long random token>
+\`\`\`
+
+`grafana` and `influxdb` services are defined in `docker-compose.yml`
+alongside the CoPilot services and join the same default network, so
+Grafana can reach `copilot-mcp` and any other container by name.
+
+Grafana needs the OpenSearch plugin, since it isn't bundled:
+
+\`\`\`yaml
+    grafana:
+        image: grafana/grafana:latest
+        environment:
+            - GF_PLUGINS_PREINSTALL_SYNC=grafana-opensearch-datasource
+            - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
+            - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD}
+\`\`\`
+
+`GF_INSTALL_PLUGINS` is deprecated in favor of `GF_PLUGINS_PREINSTALL_SYNC`.
+Double-check the plugin ID is exactly `grafana-opensearch-datasource` --
+a typo here fails silently with a 404 from the plugin catalog and the whole
+container exits.
+
+**Configuring the OpenSearch data source in Grafana** (Connections > Data
+sources > Add data source > OpenSearch):
+
+- URL: same value as `OPENSEARCH_URL` / `WAZUH_INDEXER_URL` in `.env`
+- Auth: Basic auth, using the Wazuh **indexer** credentials (not the Wazuh
+  Manager API credentials -- these are two separate services)
+- Index name: `wazuh-alerts-4.x-*`
+- **Pattern: "No pattern"** -- if a date-rotation pattern (Daily, etc.) is
+  selected, Grafana treats the Index name field as a date-format string and
+  substitutes any recognized token letters in it (`wazuh-alerts-4.x-*`
+  contains several: `a`, `h`, `l`, `s`, `w`, `x`), producing a garbled index
+  name and a `no handler found for uri [...]/_field_caps` error. The literal
+  wildcard with no pattern is simpler and works fine for this cluster size.
+- Time field: `@timestamp`
+
+Verified indices on the Wazuh indexer (`_cat/indices?v`): only
+`wazuh-*` and OpenSearch system indices are present -- no Graylog data on
+this cluster. Confirm Graylog's actual backend via its **System > Indices**
+page before adding a second OpenSearch data source for it.
+
+**InfluxDB data source:** Query Language `Flux`, URL `http://influxdb:8086`,
+Organization/Token/Bucket from the `.env` values above.
+
+**Status of InfluxDB:** connected in Grafana, but nothing currently writes
+to it. It's a time-series metrics store, not a log store -- Wazuh agent
+logs, Unifi syslog, and AdGuard logs all belong in OpenSearch (via the
+Wazuh indexer and/or Graylog), not InfluxDB. InfluxDB only becomes useful
+here if a feeder (Telegraf, or a scheduled script computing rates from
+OpenSearch) is added later for derived metrics/trend graphs. Not required
+for the current data sources.
+
+### 10.2 Velociraptor (planned, not yet deployed)
+
+Velociraptor manages its own certs/datastore on first run and ships its own
+Compose file, so it runs as a separate project rather than a service block
+in this repo's `docker-compose.yml`:
+
+\`\`\`
+mkdir -p ~/velociraptor && cd ~/velociraptor
+curl -o compose.yaml https://raw.githubusercontent.com/Velocidex/velociraptor/master/Docker/compose.yaml
+curl -o .env https://raw.githubusercontent.com/Velocidex/velociraptor/master/Docker/.env
+# edit .env: VELOCIRAPTOR_HOSTNAME, VELOCIRAPTOR_INITIAL_ADMIN_PASSWORD
+docker compose up -d
+\`\`\`
+
+To connect it to CoPilot: `copilot-mcp` in this repo's `docker-compose.yml`
+already mounts `./data/copilot-mcp/api.config.yaml` as its Velociraptor
+config (`VELOCIRAPTOR_API_KEY` env var). That file is a Velociraptor **API
+client config**, generated after exposing the API port (default 8001,
+bound to localhost only until `server.config.yaml`'s `API:` block is set to
+`bind_address: 0.0.0.0`) and running:
+
+\`\`\`
+velociraptor --config server.config.yaml config api_client_config \
+  --name mcp-service-account > api.config.yaml
+cp api.config.yaml <this repo>/data/copilot-mcp/api.config.yaml
+docker compose restart copilot-mcp
+\`\`\`
+
+### 10.3 Shuffle (planned, not yet deployed)
+
+Shuffle bundles its own OpenSearch, backend, frontend, and Orborus worker
+containers, so it also runs as its own project:
+
+\`\`\`
+git clone https://github.com/Shuffle/Shuffle ~/shuffle
+cd ~/shuffle
+sudo chown -R 1000:1000 shuffle-database
+docker compose up -d
+\`\`\`
+
+GUI defaults to port 3443. Wire it in via a Graylog alert webhook or a
+Wazuh active-response script pointed at a Shuffle workflow trigger.
 
 Give every additional stack a dedicated host-port plan before starting it.
 Docker host ports are global across all Compose projects on the VM.
-
 ## Operations
 
 ```bash
