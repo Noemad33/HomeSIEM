@@ -107,6 +107,10 @@ wazuh_token="$(random_hex 32)"
 velociraptor_token="$(random_hex 32)"
 velociraptor_header_secret="$(random_hex 32)"
 talon_api_key="$(random_hex 32)"
+grafana_admin_password="$(random_hex 16)"
+grafana_header_secret="$(random_hex 32)"
+influxdb_password="$(random_hex 16)"
+influxdb_admin_token="$(random_hex 32)"
 graylog_password_hash="$(printf '%s' "$graylog_password" | sha256sum | awk '{print $1}')"
 graylog_password_secret="$(random_hex 48)"
 
@@ -159,6 +163,23 @@ set_env "$main_env" VELOCIRAPTOR_API_HEADER_VALUE "$velociraptor_header_secret"
 # the two projects name the same shared secret differently. See README 10.4.
 set_env "$main_env" TALON_URL "$talon_url"
 set_env "$main_env" TALON_API_KEY "$talon_api_key"
+
+# Grafana and InfluxDB start automatically with the main CoPilot stack (see
+# docker-compose.yml). GRAFANA_ADMIN_*/INFLUXDB_* below bootstrap the
+# containers; GRAFANA_URL/USERNAME/PASSWORD and INFLUXDB_URL/API_KEY/
+# ORG_AND_BUCKET are the matching staging values for CoPilot's own Grafana
+# and InfluxDB connectors (Connectors UI) -- same admin login, different
+# variable names, same pattern as TALON_API_KEY/HTTP_API_KEY.
+set_env "$main_env" GRAFANA_ADMIN_PASSWORD "$grafana_admin_password"
+set_env "$main_env" GRAFANA_API_HEADER_VALUE "$grafana_header_secret"
+set_env "$main_env" GRAFANA_URL "http://${copilot_host}:3000"
+set_env "$main_env" GRAFANA_USERNAME admin
+set_env "$main_env" GRAFANA_PASSWORD "$grafana_admin_password"
+set_env "$main_env" INFLUXDB_PASSWORD "$influxdb_password"
+set_env "$main_env" INFLUXDB_ADMIN_TOKEN "$influxdb_admin_token"
+set_env "$main_env" INFLUXDB_URL "http://${copilot_host}:8086"
+set_env "$main_env" INFLUXDB_API_KEY "$influxdb_admin_token"
+set_env "$main_env" INFLUXDB_ORG_AND_BUCKET "socfortress,copilot"
 set_env "$main_env" OPENAI_API_KEY "$openai_key"
 set_env "$main_env" OPENSEARCH_SSL_VERIFY false
 set_env "$main_env" WAZUH_PROD_SSL_VERIFY false
@@ -184,3 +205,11 @@ echo "haven't deployed them yet (README Sections 10.2 and 10.4). Rerun this"
 echo "script with --force once they're up to capture their real values, or"
 echo "edit .env directly for VELOCIRAPTOR_URL, TALON_URL, and TALON_API_KEY."
 echo "TALON_API_KEY must be copied into Talon's own .env as HTTP_API_KEY."
+echo
+echo "Grafana and InfluxDB credentials were generated and written to .env --"
+echo "nothing left to fill in for them; they start with the rest of the stack."
+echo
+echo "Everything above is now filled in. The only .env values still at their"
+echo "REPLACE_* placeholder are optional third-party integrations this runbook"
+echo "doesn't cover (Shuffle, Sublime, VirusTotal, Resend, Portainer) -- leave"
+echo "them alone unless you're specifically setting one of those up."

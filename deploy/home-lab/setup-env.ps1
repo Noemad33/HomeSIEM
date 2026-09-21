@@ -103,6 +103,10 @@ $wazuhToken = New-RandomHex 32
 $veloToken = New-RandomHex 32
 $veloHeaderSecret = New-RandomHex 32
 $talonApiKey = New-RandomHex 32
+$grafanaAdminPassword = New-RandomHex 16
+$grafanaHeaderSecret = New-RandomHex 32
+$influxdbPassword = New-RandomHex 16
+$influxdbAdminToken = New-RandomHex 32
 $graylogSecret = New-RandomHex 48
 $sha256 = [Security.Cryptography.SHA256]::Create()
 $hashBytes = $sha256.ComputeHash([Text.Encoding]::UTF8.GetBytes($graylogPassword))
@@ -131,6 +135,14 @@ $mainValues = @{
     # TALON_API_KEY here must be copied into Talon's OWN .env as HTTP_API_KEY --
     # the two projects name the same shared secret differently. See README 10.4.
     TALON_URL = $talonUrl; TALON_API_KEY = $talonApiKey
+    # Grafana/InfluxDB start automatically with the main CoPilot stack.
+    # GRAFANA_ADMIN_*/INFLUXDB_* bootstrap the containers; GRAFANA_URL/
+    # USERNAME/PASSWORD and INFLUXDB_URL/API_KEY/ORG_AND_BUCKET are the
+    # matching staging values for CoPilot's own Grafana/InfluxDB connectors.
+    GRAFANA_ADMIN_PASSWORD = $grafanaAdminPassword; GRAFANA_API_HEADER_VALUE = $grafanaHeaderSecret
+    GRAFANA_URL = "http://${copilotHost}:3000"; GRAFANA_USERNAME = "admin"; GRAFANA_PASSWORD = $grafanaAdminPassword
+    INFLUXDB_PASSWORD = $influxdbPassword; INFLUXDB_ADMIN_TOKEN = $influxdbAdminToken
+    INFLUXDB_URL = "http://${copilotHost}:8086"; INFLUXDB_API_KEY = $influxdbAdminToken; INFLUXDB_ORG_AND_BUCKET = "socfortress,copilot"
     OPENSEARCH_SSL_VERIFY = "false"; WAZUH_PROD_SSL_VERIFY = "false"
 }
 foreach ($entry in $mainValues.GetEnumerator()) { Set-EnvValue $mainEnv $entry.Key $entry.Value }
@@ -153,3 +165,11 @@ Write-Host "haven't deployed them yet (README Sections 10.2 and 10.4). Rerun thi
 Write-Host "script with -Force once they're up to capture their real values, or"
 Write-Host "edit .env directly for VELOCIRAPTOR_URL, TALON_URL, and TALON_API_KEY."
 Write-Host "TALON_API_KEY must be copied into Talon's own .env as HTTP_API_KEY."
+Write-Host ""
+Write-Host "Grafana and InfluxDB credentials were generated and written to .env --"
+Write-Host "nothing left to fill in for them; they start with the rest of the stack."
+Write-Host ""
+Write-Host "Everything above is now filled in. The only .env values still at their"
+Write-Host "REPLACE_* placeholder are optional third-party integrations this runbook"
+Write-Host "doesn't cover (Shuffle, Sublime, VirusTotal, Resend, Portainer) -- leave"
+Write-Host "them alone unless you're specifically setting one of those up."
