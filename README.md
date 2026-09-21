@@ -781,8 +781,10 @@ docker compose restart copilot-mcp
 The home-lab `setup-env` wrapper sets `MCP_VELOCIRAPTOR_SERVER_ENABLED=false`
 in `.env` by default, since there is nothing to connect to until the steps
 above are done. Once a real `api.config.yaml` is in place, set it to `true`
-in `.env` and restart `copilot-mcp` (the flag above only applies to that
-service) to pick up the change.
+in `.env` and run `docker compose -f docker-compose.yml -f
+deploy/home-lab/docker-compose.override.yml up -d` to pick up the change --
+`docker compose restart` does not re-read `.env`, so the container would
+keep running with the old value even though `.env` looks correct.
 
 `setup-env` also writes two more Velociraptor values you should revisit once
 the server is actually running, since it only has a guessed default the
