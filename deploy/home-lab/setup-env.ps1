@@ -97,6 +97,14 @@ $sha256 = [Security.Cryptography.SHA256]::Create()
 $hashBytes = $sha256.ComputeHash([Text.Encoding]::UTF8.GetBytes($graylogPassword))
 $graylogHash = ($hashBytes | ForEach-Object { $_.ToString("x2") }) -join ""
 
+# Graylog runs against the same OpenSearch cluster as the Wazuh Indexer
+# (self-managed OpenSearch, no Data Node) so gl-events* is visible to
+# CoPilot's Wazuh-Indexer connector. Reuses the Wazuh Indexer credentials
+# above as a starting point -- see deploy/graylog/.env.example for the
+# privilege caveat.
+$indexerScheme, $indexerHostPort = $indexerUrl -split "://", 2
+$graylogElasticsearchHosts = "$indexerScheme`://$indexerUser`:$indexerPassword@$indexerHostPort"
+
 $mainValues = @{
     SERVER_HOST = $copilotHost; COPILOT_URL = "https://$copilotHost`:$copilotPort"; JWT_SECRET = $jwt; SSO_STATE_SECRET = $sso; TOTP_ENCRYPTION_KEY = $totp
     MYSQL_ROOT_PASSWORD = $mysqlRoot; MYSQL_PASSWORD = $mysqlPassword; MINIO_ROOT_PASSWORD = $minioPassword
@@ -113,7 +121,7 @@ $mainValues = @{
 foreach ($entry in $mainValues.GetEnumerator()) { Set-EnvValue $mainEnv $entry.Key $entry.Value }
 Set-EnvValue $graylogEnv "GRAYLOG_PASSWORD_SECRET" $graylogSecret
 Set-EnvValue $graylogEnv "GRAYLOG_VERSION" "7.1.9"
-Set-EnvValue $graylogEnv "GRAYLOG_DATANODE_OPENSEARCH_HEAP" "8g"
+Set-EnvValue $graylogEnv "GRAYLOG_ELASTICSEARCH_HOSTS" $graylogElasticsearchHosts
 Set-EnvValue $graylogEnv "GRAYLOG_ROOT_PASSWORD_SHA2" $graylogHash
 Set-EnvValue $graylogEnv "GRAYLOG_HTTP_EXTERNAL_URI" $graylogExternalUri
 Set-EnvValue $graylogEnv "GRAYLOG_SYSLOG_UDP_PORT" "2514"
@@ -121,4 +129,6 @@ Set-EnvValue $graylogEnv "GRAYLOG_SYSLOG_TCP_PORT" "2515"
 
 Write-Host "Created .env and deploy\graylog\.env with generated secrets."
 Write-Host "The Graylog admin password was not written to either file. Store it in your password manager."
-Write-Host "Start Graylog first, initialize its Data Node, then run setup.ps1."
+Write-Host "Graylog points at the Wazuh Indexer's OpenSearch cluster (GRAYLOG_ELASTICSEARCH_HOSTS in"
+Write-Host "deploy\graylog\.env) instead of running its own Data Node -- confirm that connection works"
+Write-Host "before relying on Graylog alerts reaching CoPilot. Start Graylog first, then run setup.ps1."

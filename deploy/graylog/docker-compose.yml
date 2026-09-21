@@ -7,22 +7,6 @@ services:
     networks:
       - graylog
 
-  graylog-datanode:
-    image: graylog/graylog-datanode:${GRAYLOG_VERSION:-7.1.9}
-    hostname: graylog-datanode
-    restart: unless-stopped
-    environment:
-      GRAYLOG_DATANODE_NODE_ID_FILE: /var/lib/graylog-datanode/node-id
-      GRAYLOG_DATANODE_PASSWORD_SECRET: ${GRAYLOG_PASSWORD_SECRET}
-      GRAYLOG_DATANODE_MONGODB_URI: mongodb://mongodb:27017/graylog
-      GRAYLOG_DATANODE_OPENSEARCH_HEAP: ${GRAYLOG_DATANODE_OPENSEARCH_HEAP:-8g}
-    volumes:
-      - graylog-datanode-data:/var/lib/graylog-datanode
-    depends_on:
-      - mongodb
-    networks:
-      - graylog
-
   graylog:
     image: graylog/graylog:${GRAYLOG_VERSION:-7.1.9}
     hostname: graylog
@@ -34,7 +18,12 @@ services:
       GRAYLOG_HTTP_EXTERNAL_URI: ${GRAYLOG_HTTP_EXTERNAL_URI}
       GRAYLOG_MONGODB_URI: mongodb://mongodb:27017/graylog
       GRAYLOG_NODE_ID_FILE: /usr/share/graylog/data/config/node-id
-      GRAYLOG_DATANODE_DATA_DIR: /var/lib/graylog-datanode
+      # Points Graylog at the existing Wazuh Indexer OpenSearch cluster instead
+      # of running Graylog's own Data Node, so gl-events* lands in the same
+      # cluster CoPilot's Wazuh-Indexer connector already queries. Credentials
+      # are embedded in the URL: scheme://user:pass@host:port. See
+      # deploy/graylog/.env.example for the required OpenSearch role caveat.
+      GRAYLOG_ELASTICSEARCH_HOSTS: ${GRAYLOG_ELASTICSEARCH_HOSTS}
     volumes:
       - graylog-data:/usr/share/graylog/data
     ports:
@@ -43,14 +32,12 @@ services:
       - "${GRAYLOG_SYSLOG_TCP_PORT:-2515}:1514/tcp"
     depends_on:
       - mongodb
-      - graylog-datanode
     networks:
       - graylog
 
 volumes:
   mongodb-data:
   graylog-data:
-  graylog-datanode-data:
 
 networks:
   graylog:

@@ -20,11 +20,12 @@ Wazuh agents ----------------------> Wazuh Manager + Indexer (OpenSearch)
 
 UDM / network devices --> Graylog --> CoPilot
                               |
-                              +--> its own OpenSearch/Elasticsearch backend
-                                   (confirm via Graylog System > Indices;
-                                    not currently the same cluster as the
-                                    Wazuh Indexer above -- verified via
-                                    _cat/indices)
+                              +--> writes into the SAME OpenSearch cluster as
+                                   the Wazuh Indexer above (self-managed
+                                   OpenSearch, no Graylog Data Node) so
+                                   gl-events* is visible to CoPilot's
+                                   Wazuh-Indexer connector; confirm via
+                                   Graylog System > Indices / _cat/indices
 
 InfluxDB --> Grafana (time-series store; deployed but not yet fed by
              anything in this stack -- see Section 10.1)
@@ -33,7 +34,12 @@ CoPilot --> optional Velociraptor (DFIR), Shuffle (SOAR), VirusTotal (enrichment
 ```
 
 Wazuh, Graylog, and CoPilot are separate Compose projects on the same VM.
-This avoids coupling their certificate, storage, and upgrade lifecycles.
+This avoids coupling their certificate and upgrade lifecycles. Storage is an
+exception: Graylog is deliberately pointed at the Wazuh Indexer's OpenSearch
+cluster (see `GRAYLOG_ELASTICSEARCH_HOSTS` below) rather than running its own
+Data Node, because CoPilot's automatic alert ingestion queries `gl-events*`
+through the Wazuh-Indexer connector -- if Graylog wrote to a separate
+cluster, those events would never reach CoPilot's Incident Management.
 
 Grafana and InfluxDB currently run as additional services inside the root
 `docker-compose.yml` (the CoPilot project), rather than as their own Compose
@@ -68,6 +74,7 @@ Reserve these host ports:
 | Graylog | `9000` | Web UI/API |
 | Graylog | `2514/udp` | UDM syslog |
 | Graylog | `2515/tcp` | UDM syslog |
+| Graylog | `5555/tcp` | Wazuh Fluent Bit input (not mapped by default; see 8.4) |
 | CoPilot | `8443` | HTTPS frontend |
 | Grafana      | `3000`  | Dashboards (OpenSearch + InfluxDB)                 |
 | InfluxDB     | `8086`  | Time-series API (deployed, currently unused)       |
@@ -76,17 +83,16 @@ Reserve these host ports:
 | Velociraptor | `8001`  | API, consumed by copilot-mcp (not yet deployed)    |
 | Shuffle      | `3443`  | Web UI (not yet deployed)                          |
 
-This repository pins Graylog and Graylog Data Node to `7.1.9`, the current
-stable release used by this deployment. Keep both Graylog images on the same
-version. Graylog 7.1 requires MongoDB 7.x, which is why this stack uses
-`mongo:7.0`.
+This repository pins Graylog to `7.1.9`, the current stable release used by
+this deployment. Graylog 7.1 requires MongoDB 7.x, which is why this stack
+uses `mongo:7.0`.
 
-The Data Node OpenSearch heap defaults to `8g` in
-`deploy/graylog/.env`. Graylog may display a warning recommending half of the
-VM's RAM, but that generic recommendation is not a target for this home stack.
-Leave headroom for Wazuh, Graylog, MongoDB, Docker, and Debian. Increase the
-heap to `16g` only after monitoring actual memory pressure and ingest volume;
-do not jump directly to `62g`.
+Graylog does not run its own Data Node or OpenSearch heap in this deployment
+-- it connects to the Wazuh Indexer's existing OpenSearch cluster via
+`GRAYLOG_ELASTICSEARCH_HOSTS` (see Section 5). Graylog's ingest adds to the
+load already carried by that cluster, so size the Wazuh Indexer's own
+OpenSearch heap (set on the Wazuh side, not in this repo) with Graylog's
+expected volume in mind, not just Wazuh's.
 
 Restrict these ports to the LAN or VPN. Do not expose service administration
 ports directly to the public internet.
@@ -191,7 +197,28 @@ On Windows PowerShell, use:
 
 ## 5. Start and initialize Graylog
 
-Start Graylog before CoPilot:
+### 5.1 Point Graylog at the Wazuh Indexer's OpenSearch cluster
+
+This deployment does not run Graylog's own Data Node. Graylog connects
+directly to the same OpenSearch cluster as the Wazuh Indexer, because
+CoPilot's automatic alert ingestion reads Graylog's `gl-events*` indices
+through the Wazuh-Indexer connector -- a separate cluster would never be
+visible to it. `deploy/home-lab/setup-env.sh`/`.ps1` derive
+`GRAYLOG_ELASTICSEARCH_HOSTS` in `deploy/graylog/.env` from the Wazuh Indexer
+URL/credentials you already entered, in the form
+`scheme://user:pass@host:port`.
+
+**This is unproven on a security-enabled OpenSearch cluster.** Neither
+Graylog's nor SOCFortress's documentation specifies the minimum OpenSearch
+Security privileges a Graylog user needs. Start by reusing the Wazuh Indexer
+admin credentials (the default `setup-env` produces) to confirm the
+connection works end to end, then create and test a narrower role before
+treating this as production-ready. Expect to troubleshoot this step; if
+Graylog fails to start or logs OpenSearch authentication/authorization
+errors, check that the embedded user has index-create and index-write
+privileges, not just read/search.
+
+### 5.2 Start Graylog
 
 ```bash
 docker compose \
@@ -214,28 +241,17 @@ docker compose \
   logs --tail=200
 ```
 
-On the first Graylog startup, the Graylog/Data Node bootstrap process may emit
-a temporary initialization password in the logs. Capture it before the
-bootstrap restart because it is needed to initialize certificates and the
-Data Node:
-
-```bash
-docker compose \
-  --env-file deploy/graylog/.env \
-  -f deploy/graylog/docker-compose.yml \
-  logs -f graylog graylog-datanode
-```
-
-Search the output for the initial password/bootstrap message and store it in
-your password manager. Do not commit it or paste it into support logs. After
-the Data Node and certificate bootstrap completes, Graylog restarts and uses
-the final password configured by `GRAYLOG_ROOT_PASSWORD_SHA2` in
+Without a Data Node to bootstrap, there is no temporary initialization
+password to capture. Graylog starts directly with the final administrator
+password configured by `GRAYLOG_ROOT_PASSWORD_SHA2` in
 `deploy/graylog/.env`.
 
-Open `http://VM_IP:9000` and log in as `admin` with that final password.
-Complete Data Node initialization in the Graylog UI before continuing. If the
-containers restart before you capture the bootstrap password, inspect the
-complete first-start logs before removing volumes.
+Open `http://VM_IP:9000` and log in as `admin` with that password. If Graylog
+does not become healthy, check the logs above for OpenSearch connection
+errors before anything else -- most first-run failures here are
+`GRAYLOG_ELASTICSEARCH_HOSTS` reachability or OpenSearch Security privilege
+problems, not a Graylog-specific issue. If the containers restart
+unexpectedly, inspect the complete first-start logs before removing volumes.
 
 ### Create the Syslog inputs
 
@@ -337,9 +353,11 @@ setting. Pull the current repository and confirm that
 GRAYLOG_VERSION=7.1.9
 ```
 
-For an existing deployment, back up Graylog and MongoDB before upgrading. Do
-not run `down -v`; that deletes the Data Node, Graylog, and MongoDB volumes.
-Pull and recreate the Graylog services:
+For an existing deployment, back up MongoDB and the Wazuh Indexer's
+OpenSearch data before upgrading (Graylog itself is stateless aside from
+`graylog-data`; its events live on the Wazuh Indexer cluster). Do not run
+`down -v`; that deletes the Graylog and MongoDB volumes. Pull and recreate
+the Graylog services:
 
 ```bash
 docker compose --env-file deploy/graylog/.env \
@@ -527,6 +545,37 @@ the Graylog test event can be searched before creating a case.
 
 Keep Graylog and CoPilot on a private network. Do not expose connector
 credentials or `.env` to the browser, Git, or support logs.
+
+### 8.4 Enable Wazuh alert provisioning
+
+Incident Management stays empty until this step, even if Wazuh detections
+are firing correctly -- see Section 5.1 and the architecture note above for
+why. In CoPilot, open **Log Management > Graylog Management**, find **Alert
+Provisioning**, and enable the pre-built **`WAZUH SYSLOG LEVEL ALERT`** item.
+
+This creates a Graylog Event Definition with the query
+`syslog_level:ALERT AND syslog_type:wazuh AND NOT (rule_group1:office365 OR
+rule_group1:vulnerability-detector)`. Two prerequisites must already be true
+for it to match anything:
+
+- The `SOCFORTRESS_WAZUH_CONTENT_PACK` has been provisioned into Graylog
+  (**Log Management > Graylog Management**, or the content-pack provisioning
+  API). It creates the pipeline rules that set `syslog_level`/`syslog_type`,
+  and a `WAZUH EVENTS FLUENT BIT - TCP` input on port `5555` -- a different
+  input than the UDM Syslog UDP/TCP input from Section 5. That port is not
+  yet mapped in `deploy/graylog/docker-compose.yml`; add a
+  `"${GRAYLOG_WAZUH_FLUENTBIT_PORT:-5555}:5555/tcp"` entry if you use this
+  path, and configure Wazuh's own Fluent Bit output to forward to it.
+- Wazuh agents need a `CUSTOMER_CODE` resolvable from
+  `${source.agent_labels_customer}` -- associate agents with a customer code
+  (Section 4) before expecting this alert to populate correctly.
+
+You do **not** need to add a Graylog **Alerts > Notifications** entry for
+this alert. CoPilot polls `gl-events*` on a schedule instead of Graylog
+pushing to it via webhook; a Notification is only required for the separate
+threshold/aggregation alert pattern (custom alerts you build yourself, not
+this pre-built one). Adding one here is optional, for your own visibility
+(e.g. an email ping), not required for the alert to reach CoPilot.
 
 ## 9. Test the monitoring loop
 

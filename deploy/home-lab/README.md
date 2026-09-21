@@ -11,11 +11,16 @@ workflows.
 ```text
 home endpoints + network devices
         |
-        +--> Wazuh agents / syslog --> Wazuh manager + indexer
+        +--> Wazuh agents / syslog --> Wazuh manager + indexer (OpenSearch)
         |                                  |
-        |                                  +--> CoPilot connector
-        |
-        +--> optional Graylog ----------------> CoPilot alert ingestion
+        |                                  +--> CoPilot connector (search,
+        |                                  |    inventory, SCA, vulns)
+        |                                  |
+        |                                  +--> Graylog (writes gl-events*
+        |                                       into this SAME cluster)
+        |                                              |
+        +--> Graylog (UDM/network syslog) -------------+--> CoPilot Incident
+                                                              Management alerts
 
 CoPilot --> Velociraptor (collection and response)
         --> Shuffle (notifications and automation)
@@ -23,8 +28,15 @@ CoPilot --> Velociraptor (collection and response)
         --> Talon (optional AI investigations)
 ```
 
-The recommended first deployment is Wazuh plus CoPilot. Add Graylog only when
-you need its stream and event-definition workflow, and add Velociraptor before
+**Graylog is not optional if you want alerts to reach CoPilot's Incident
+Management automatically.** CoPilot's only automated Wazuh-alert-ingestion
+path polls Graylog's `gl-events*` indices through the Wazuh-Indexer
+connector -- there is no separate scheduler that pulls alerts directly from
+the Wazuh Indexer. Wazuh plus CoPilot alone gives you agent inventory,
+live search, SCA, and vulnerability data, but Incident Management stays
+empty until Graylog is deployed, pointed at the same OpenSearch cluster as
+the Wazuh Indexer (see root `README.md` Section 5.1), and an alert-provisioning
+item (e.g. `WAZUH SYSLOG LEVEL ALERT`) is enabled. Add Velociraptor before
 enabling automated endpoint response.
 
 ## Deployment model
@@ -75,7 +87,18 @@ printf '%s' 'CHOOSE_A_GRAYLOG_ADMIN_PASSWORD' | sha256sum
 ```
 
 Set `GRAYLOG_PASSWORD_SECRET` to a separate value generated with
-`openssl rand -hex 48`, then start the Graylog project:
+`openssl rand -hex 48`. This deployment does not run Graylog's own Data
+Node -- `deploy/home-lab/setup-env.sh`/`.ps1` set `GRAYLOG_ELASTICSEARCH_HOSTS`
+to point Graylog directly at the Wazuh Indexer's OpenSearch cluster, because
+CoPilot's automatic alert ingestion reads Graylog's `gl-events*` indices
+through the Wazuh-Indexer connector. **This is unproven on a
+security-enabled OpenSearch cluster**: the minimum OpenSearch Security
+privileges a Graylog user needs aren't documented anywhere. Start with the
+Wazuh Indexer admin credentials to confirm the connection works, then narrow
+the role once it's proven working. See the root `README.md` Section 5.1 for
+more detail.
+
+Start the Graylog project:
 
 ```bash
 docker compose --env-file deploy/graylog/.env \
@@ -86,24 +109,15 @@ docker compose --env-file deploy/graylog/.env \
   -f deploy/graylog/docker-compose.yml logs --tail=200
 ```
 
-On first startup, Graylog/Data Node bootstrap may emit a temporary
-initialization password in the logs. Capture it before the bootstrap restart;
-it is needed for certificate and Data Node initialization:
+Without a Data Node to bootstrap, there is no temporary initialization
+password. Graylog starts directly with the final password configured by
+`GRAYLOG_ROOT_PASSWORD_SHA2` in `deploy/graylog/.env`. Open Graylog at
+`GRAYLOG_HTTP_EXTERNAL_URI` and log in as `admin` with that password. If
+Graylog does not become healthy, check the logs above for OpenSearch
+connection/authentication errors before anything else -- that is the most
+likely first-run failure with this setup.
 
-```bash
-docker compose --env-file deploy/graylog/.env \
-  -f deploy/graylog/docker-compose.yml logs -f graylog graylog-datanode
-```
-
-Store that temporary password securely and never commit or paste it into
-support logs. After bootstrap completes, Graylog restarts and applies the
-final password configured by `GRAYLOG_ROOT_PASSWORD_SHA2` in
-`deploy/graylog/.env`. Open Graylog at `GRAYLOG_HTTP_EXTERNAL_URI` and log in
-as `admin` with the final password. Complete Data Node initialization before
-creating inputs. If the containers restart before the temporary password is
-captured, inspect the full first-start logs before removing any volumes.
-
-After Data Node initialization, open **System > Inputs** in Graylog and launch
+Open **System > Inputs** in Graylog and launch
 a **Syslog UDP** input with title `HomeSIEM Syslog UDP`, bind address
 `0.0.0.0`, and container port `1514`. If TCP is needed, launch a separate
 **Syslog TCP** input with the same bind address and container port. Docker
@@ -227,13 +241,13 @@ private LAN and set a strong `GRAYLOG_API_HEADER_VALUE`.
 
 ## Optional integrations
 
-### Graylog
-
-Use the bundled Graylog project at `deploy/graylog`. Start it before CoPilot,
-create its Syslog UDP/TCP inputs, and send UDM logs to the Graylog host. Use
-Graylog streams and event definitions for UDM and AdGuard-derived events, then
-configure the Graylog connector in CoPilot. Validate one event definition end
-to end before creating broad alert rules.
+Graylog is covered in Section 2 above -- it is required for automatic alert
+ingestion into Incident Management, not optional. Once it's running, use
+Graylog streams and event definitions for UDM and AdGuard-derived events,
+configure the Graylog connector in CoPilot, and enable the built-in
+`WAZUH SYSLOG LEVEL ALERT` provisioning item (Log Management > Graylog
+Management > Alert Provisioning) for Wazuh. Validate one event definition
+end to end before creating broad alert rules.
 
 ### Velociraptor
 

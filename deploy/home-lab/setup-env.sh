@@ -99,6 +99,15 @@ velociraptor_token="$(random_hex 32)"
 graylog_password_hash="$(printf '%s' "$graylog_password" | sha256sum | awk '{print $1}')"
 graylog_password_secret="$(random_hex 48)"
 
+# Graylog runs against the same OpenSearch cluster as the Wazuh Indexer
+# (self-managed OpenSearch, no Data Node) so gl-events* is visible to
+# CoPilot's Wazuh-Indexer connector. Reuses the Wazuh Indexer credentials
+# above as a starting point -- see deploy/graylog/.env.example for the
+# privilege caveat.
+wazuh_indexer_scheme="${wazuh_indexer_url%%://*}"
+wazuh_indexer_hostport="${wazuh_indexer_url#*://}"
+graylog_elasticsearch_hosts="${wazuh_indexer_scheme}://${wazuh_indexer_user}:${wazuh_indexer_password}@${wazuh_indexer_hostport}"
+
 set_env "$main_env" SERVER_HOST "$copilot_host"
 read -r -p "CoPilot HTTPS port [8443]: " copilot_port
 copilot_port="${copilot_port:-8443}"
@@ -139,7 +148,7 @@ set_env "$main_env" WAZUH_PROD_SSL_VERIFY false
 
 set_env "$graylog_env" GRAYLOG_PASSWORD_SECRET "$graylog_password_secret"
 set_env "$graylog_env" GRAYLOG_VERSION 7.1.9
-set_env "$graylog_env" GRAYLOG_DATANODE_OPENSEARCH_HEAP 8g
+set_env "$graylog_env" GRAYLOG_ELASTICSEARCH_HOSTS "$graylog_elasticsearch_hosts"
 set_env "$graylog_env" GRAYLOG_ROOT_PASSWORD_SHA2 "$graylog_password_hash"
 set_env "$graylog_env" GRAYLOG_HTTP_EXTERNAL_URI "$graylog_external_uri"
 set_env "$graylog_env" GRAYLOG_SYSLOG_UDP_PORT 2514
@@ -148,5 +157,7 @@ set_env "$graylog_env" GRAYLOG_SYSLOG_TCP_PORT 2515
 echo
 echo "Created $main_env and $graylog_env with generated secrets."
 echo "The Graylog admin password was not written to either file. Store it in your password manager."
-echo "Start Graylog first, initialize its Data Node, then run:"
+echo "Graylog points at the Wazuh Indexer's OpenSearch cluster (GRAYLOG_ELASTICSEARCH_HOSTS in"
+echo "deploy/graylog/.env) instead of running its own Data Node -- confirm that connection works"
+echo "before relying on Graylog alerts reaching CoPilot. Start Graylog first, then run:"
 echo "  bash deploy/home-lab/setup.sh --pull --capture-admin-password"
